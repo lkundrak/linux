@@ -306,9 +306,7 @@ mv_xor_run_tx_complete_actions(struct mv_xor_desc_slot *desc,
 			desc->async_tx.callback(
 				desc->async_tx.callback_param);
 
-		/* unmap dma addresses
-		 * (unmap_single vs unmap_page?)
-		 */
+		/* unmap dma addresses */
 		if (desc->group_head && desc->unmap_len) {
 			struct mv_xor_desc_slot *unmap = desc->group_head;
 			struct device *dev = mv_chan_to_devp(mv_chan);
@@ -327,7 +325,11 @@ mv_xor_run_tx_complete_actions(struct mv_xor_desc_slot *desc,
 					dir = DMA_BIDIRECTIONAL;
 				else
 					dir = DMA_FROM_DEVICE;
-				dma_unmap_page(dev, dest, len, dir);
+
+				if (flags & DMA_COMPL_DEST_UNMAP_SINGLE)
+					dma_unmap_single(dev, dest, len, dir);
+				else
+					dma_unmap_page(dev, dest, len, dir);
 			}
 
 			if (!(flags & DMA_COMPL_SKIP_SRC_UNMAP)) {
@@ -336,8 +338,12 @@ mv_xor_run_tx_complete_actions(struct mv_xor_desc_slot *desc,
 								    src_cnt);
 					if (addr == dest)
 						continue;
-					dma_unmap_page(dev, addr, len,
-						       DMA_TO_DEVICE);
+					if (flags & DMA_COMPL_SRC_UNMAP_SINGLE)
+						dma_unmap_single(dev, addr, len,
+							       DMA_TO_DEVICE);
+					else
+						dma_unmap_page(dev, addr, len,
+							       DMA_TO_DEVICE);
 				}
 			}
 			desc->group_head = NULL;
@@ -932,7 +938,9 @@ static int mv_xor_memcpy_self_test(struct mv_xor_chan *mv_chan)
 				 MV_XOR_TEST_SIZE, DMA_TO_DEVICE);
 
 	tx = mv_xor_prep_dma_memcpy(dma_chan, dest_dma, src_dma,
-				    MV_XOR_TEST_SIZE, 0);
+				    MV_XOR_TEST_SIZE,
+				    DMA_COMPL_SRC_UNMAP_SINGLE |
+				    DMA_COMPL_DEST_UNMAP_SINGLE);
 	cookie = mv_xor_tx_submit(tx);
 	mv_xor_issue_pending(dma_chan);
 	async_tx_ack(tx);
