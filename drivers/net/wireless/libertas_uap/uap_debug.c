@@ -241,9 +241,6 @@ uap_debug_entry(uap_private * priv, struct net_device *dev)
     r->data = &items[0];
     r->read_proc = uap_debug_read;
     r->write_proc = uap_debug_write;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
-    r->owner = THIS_MODULE;
-#endif
 }
 
 /**

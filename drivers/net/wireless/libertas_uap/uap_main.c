@@ -431,21 +431,9 @@ uap_init_sw(uap_private * priv)
     /* PnP support */
     Adapter->SurpriseRemoved = FALSE;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-    Adapter->nl_sk = netlink_kernel_create(NETLINK_MARVELL,
-                                           NL_MULTICAST_GROUP, NULL,
-                                           THIS_MODULE);
-#else
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
-    Adapter->nl_sk = netlink_kernel_create(NETLINK_MARVELL,
-                                           NL_MULTICAST_GROUP, NULL, NULL,
-                                           THIS_MODULE);
-#else
     Adapter->nl_sk = netlink_kernel_create(&init_net, NETLINK_MARVELL,
                                            NL_MULTICAST_GROUP, NULL, NULL,
                                            THIS_MODULE);
-#endif
-#endif
     if (!Adapter->nl_sk) {
         PRINTM(ERROR,
                "Could not initialize netlink event passing mechanism!\n");
@@ -1506,11 +1494,6 @@ uap_process_event(uap_private * priv, u8 * payload, uint len)
         /* From Kernel */
         NETLINK_CB(skb).pid = 0;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-        /* Multicast message */
-        NETLINK_CB(skb).dst_pid = 0;
-#endif
-
         /* Multicast group number */
         NETLINK_CB(skb).dst_group = NL_MULTICAST_GROUP;
 
@@ -1548,7 +1531,6 @@ uap_interrupt(uap_private * priv)
 
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)
 /** Network device handlers */
 static const struct net_device_ops uap_netdev_ops = {
     .ndo_open = uap_open,
@@ -1560,7 +1542,6 @@ static const struct net_device_ops uap_netdev_ops = {
     .ndo_get_stats = uap_get_stats,
     .ndo_set_multicast_list = uap_set_multicast_list,
 };
-#endif
 
 /**
  * @brief This function adds the card. it will probe the
@@ -1606,23 +1587,8 @@ uap_add_card(void *card)
     uappriv = priv;
     ((struct sdio_mmc_card *) card)->priv = priv;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
-    SET_MODULE_OWNER(dev);
-#endif
-
     /* Setup the OS Interface to our functions */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
-    dev->open = uap_open;
-    dev->stop = uap_close;
-    dev->hard_start_xmit = uap_hard_start_xmit;
-    dev->tx_timeout = uap_tx_timeout;
-    dev->get_stats = uap_get_stats;
-    dev->do_ioctl = uap_do_ioctl;
-    dev->set_mac_address = uap_set_mac_address;
-    dev->set_multicast_list = uap_set_multicast_list;
-#else
     dev->netdev_ops = &uap_netdev_ops;
-#endif
     dev->watchdog_timeo = MRVDRV_DEFAULT_WATCHDOG_TIMEOUT;
     dev->hard_header_len += sizeof(TxPD) + INTF_HEADER_LEN;
     dev->hard_header_len += HEADER_ALIGNMENT;

@@ -21,13 +21,7 @@
 #include "uap_headers.h"
 
 /** /proc directory root */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 #define PROC_DIR NULL
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
-#define PROC_DIR &proc_root
-#else
-#define PROC_DIR proc_net
-#endif
 
 /********************************************************
 		Local Variables
@@ -194,16 +188,6 @@ uap_proc_entry(uap_private * priv, struct net_device *dev)
 
     PRINTM(INFO, "Creating Proc Interface\n");
     /* Check if uap directory already exists */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
-    for (r = r->subdir; r; r = r->next) {
-        if (r->namelen && !strcmp("uap", r->name)) {
-            /* Directory exists */
-            PRINTM(WARN, "proc directory already exists!\n");
-            priv->proc_uap = r;
-            break;
-        }
-    }
-#endif
     if (!priv->proc_uap) {
         priv->proc_uap = proc_mkdir("uap", PROC_DIR);
         if (!priv->proc_uap)
@@ -223,9 +207,6 @@ uap_proc_entry(uap_private * priv, struct net_device *dev)
             r->data = dev;
             r->read_proc = uap_hwstatus_read;
             r->write_proc = uap_hwstatus_write;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
-            r->owner = THIS_MODULE;
-#endif
         } else
             PRINTM(MSG, "Fail to create proc hwstatus\n");
     }
