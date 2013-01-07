@@ -191,7 +191,7 @@ typedef u8 BOOLEAN;
 #define MODULE_PUT	module_put(THIS_MODULE)
 
 /** OS macro to initialize semaphore */
-#define OS_INIT_SEMAPHORE(x)    	init_MUTEX(x)
+#define OS_INIT_SEMAPHORE(x)    	sema_init(x, 1)
 /** OS macro to acquire blocking semaphore */
 #define OS_ACQ_SEMAPHORE_BLOCK(x)	down_interruptible(x)
 /** OS macro to acquire non-blocking semaphore */
@@ -627,8 +627,7 @@ typedef enum _mv_type
 /** Disable interrupt */
 #define OS_INT_DISABLE	spin_lock_irqsave(&priv->driver_lock, priv->driver_flags)
 /** Enable interrupt */
-#define	OS_INT_RESTORE	spin_unlock_irqrestore(&priv->driver_lock, priv->driver_flags); \
-			priv->driver_lock = SPIN_LOCK_UNLOCKED
+#define	OS_INT_RESTORE	spin_unlock_irqrestore(&priv->driver_lock, priv->driver_flags)
 
 int uap_process_rx_packet(uap_private * priv, struct sk_buff *skb);
 void uap_interrupt(uap_private * priv);

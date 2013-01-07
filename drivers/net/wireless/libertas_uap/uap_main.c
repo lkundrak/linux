@@ -395,6 +395,9 @@ static int
 uap_init_sw(uap_private * priv)
 {
     uap_adapter *Adapter = priv->adapter;
+    struct netlink_kernel_cfg cfg = {
+        .groups = NL_MULTICAST_GROUP,
+    };
 
     ENTER();
 
@@ -431,9 +434,7 @@ uap_init_sw(uap_private * priv)
     /* PnP support */
     Adapter->SurpriseRemoved = FALSE;
 
-    Adapter->nl_sk = netlink_kernel_create(&init_net, NETLINK_MARVELL,
-                                           NL_MULTICAST_GROUP, NULL, NULL,
-                                           THIS_MODULE);
+    Adapter->nl_sk = netlink_kernel_create(&init_net, NETLINK_MARVELL, &cfg);
     if (!Adapter->nl_sk) {
         PRINTM(ERROR,
                "Could not initialize netlink event passing mechanism!\n");
@@ -1492,7 +1493,7 @@ uap_process_event(uap_private * priv, u8 * payload, uint len)
         memcpy(NLMSG_DATA(nlh), payload, len);
 
         /* From Kernel */
-        NETLINK_CB(skb).pid = 0;
+        NETLINK_CB(skb).portid = 0;
 
         /* Multicast group number */
         NETLINK_CB(skb).dst_group = NL_MULTICAST_GROUP;
@@ -1540,7 +1541,7 @@ static const struct net_device_ops uap_netdev_ops = {
     .ndo_set_mac_address = uap_set_mac_address,
     .ndo_tx_timeout = uap_tx_timeout,
     .ndo_get_stats = uap_get_stats,
-    .ndo_set_multicast_list = uap_set_multicast_list,
+    .ndo_set_rx_mode = uap_set_multicast_list,
 };
 
 /**

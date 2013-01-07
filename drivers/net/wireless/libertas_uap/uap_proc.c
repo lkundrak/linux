@@ -50,10 +50,10 @@ static int
 uap_proc_read(char *page, char **start, off_t offset,
               int count, int *eof, void *data)
 {
-    int i;
+    int i = 0;
+    struct netdev_hw_addr *ha;
     char *p = page;
     struct net_device *netdev = data;
-    struct dev_mc_list *mcptr = netdev->mc_list;
     char fmt[64];
     uap_private *priv = (uap_private *) netdev_priv(netdev);
 
@@ -73,21 +73,19 @@ uap_proc_read(char *page, char **start, off_t offset,
     p += sprintf(p, "MACAddress=\"%02x:%02x:%02x:%02x:%02x:%02x\"\n",
                  netdev->dev_addr[0], netdev->dev_addr[1], netdev->dev_addr[2],
                  netdev->dev_addr[3], netdev->dev_addr[4], netdev->dev_addr[5]);
-    p += sprintf(p, "MCCount=\"%d\"\n", netdev->mc_count);
+    p += sprintf(p, "MCCount=\"%d\"\n", netdev_mc_count(netdev));
 
     /*
      * Put out the multicast list
      */
-    for (i = 0; i < netdev->mc_count; i++) {
+    netdev_for_each_mc_addr (ha, netdev) {
         p += sprintf(p,
                      "MCAddr[%d]=\"%02x:%02x:%02x:%02x:%02x:%02x\"\n",
-                     i,
-                     mcptr->dmi_addr[0], mcptr->dmi_addr[1],
-                     mcptr->dmi_addr[2], mcptr->dmi_addr[3],
-                     mcptr->dmi_addr[4], mcptr->dmi_addr[5]);
-
-        mcptr = mcptr->next;
+                     i++,
+                     ha->addr[0], ha->addr[1], ha->addr[2],
+                     ha->addr[3], ha->addr[4], ha->addr[5]);
     }
+
     p += sprintf(p, "num_tx_bytes = %lu\n", priv->stats.tx_bytes);
     p += sprintf(p, "num_rx_bytes = %lu\n", priv->stats.rx_bytes);
     p += sprintf(p, "num_tx_pkts = %lu\n", priv->stats.tx_packets);
