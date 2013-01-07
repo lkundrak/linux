@@ -977,6 +977,106 @@ out:
 	return err;
 }
 
+
+#define MV_XOR_TEST_PAD1 0x5b
+#define MV_XOR_TEST_PAD2 0x6b
+#define MV_XOR_TEST_BYTE 0x7b
+static int mv_xor_memcpy_min_self_test(struct mv_xor_chan *mv_chan)
+{
+	int i;
+	u8 *src, *dest;
+	dma_addr_t src_dma, dest_dma;
+	struct dma_chan *dma_chan;
+	dma_cookie_t cookie;
+	struct dma_async_tx_descriptor *tx;
+	int err = 0;
+
+	src = kzalloc(sizeof(u8) * MV_XOR_TEST_SIZE, GFP_KERNEL);
+	if (!src)
+		return -ENOMEM;
+	memset(src, MV_XOR_TEST_PAD1, MV_XOR_TEST_SIZE);
+	src[0] = MV_XOR_TEST_BYTE;
+
+	dest = kmalloc(sizeof(u8) * MV_XOR_TEST_SIZE, GFP_KERNEL);
+	if (!dest) {
+		kfree(src);
+		return -ENOMEM;
+	}
+	memset(dest, MV_XOR_TEST_PAD2, MV_XOR_TEST_SIZE);
+
+	/* Start copy, using first DMA channel */
+	dma_chan = &mv_chan->dmachan;
+	if (mv_xor_alloc_chan_resources(dma_chan) < 1) {
+		err = -ENODEV;
+		goto out;
+	}
+
+	dest_dma = dma_map_single(dma_chan->device->dev, dest,
+				  MV_XOR_TEST_SIZE, DMA_FROM_DEVICE);
+	if (dma_mapping_error(dma_chan->device->dev, dest_dma)) {
+		dev_err(dma_chan->device->dev,
+			"Could not map destination buffer, disabling\n");
+		err = -ENODEV;
+		goto free_resources;
+	}
+
+	src_dma = dma_map_single(dma_chan->device->dev, src,
+				 MV_XOR_TEST_SIZE, DMA_TO_DEVICE);
+	if (dma_mapping_error(dma_chan->device->dev, src_dma)) {
+		dev_err(dma_chan->device->dev,
+			"Could not map source buffer, disabling\n");
+		err = -ENODEV;
+		goto free_resources;
+	}
+
+	tx = mv_xor_prep_dma_memcpy(dma_chan, dest_dma, src_dma,
+				    1,
+				    DMA_COMPL_SKIP_SRC_UNMAP |
+				    DMA_COMPL_SKIP_DEST_UNMAP);
+	cookie = mv_xor_tx_submit(tx);
+	mv_xor_issue_pending(dma_chan);
+	async_tx_ack(tx);
+	msleep(1);
+
+	if (mv_xor_status(dma_chan, cookie, NULL) !=
+	    DMA_SUCCESS) {
+		dev_err(KERN_ERR, dma_chan->device->dev,
+			"Self-test copy timed out, disabling\n");
+		err = -ENODEV;
+		goto free_resources;
+	}
+
+	dma_sync_single_for_cpu(dma_chan->device->dev, dest_dma,
+				MV_XOR_TEST_SIZE, DMA_FROM_DEVICE);
+	dma_unmap_single(dma_chan->device->dev, dest_dma, MV_XOR_TEST_SIZE,
+			 DMA_FROM_DEVICE);
+	dma_unmap_single(dma_chan->device->dev, src_dma, MV_XOR_TEST_SIZE,
+			 DMA_TO_DEVICE);
+
+	if (dest[0] != MV_XOR_TEST_BYTE) {
+		dev_err(dma_chan->device->dev, "First byte not copied, disabling\n");
+		err = -ENODEV;
+		goto free_resources;
+	}
+	for (i = 1; i < MV_XOR_TEST_SIZE; i++) {
+		if (dest[i] != MV_XOR_TEST_PAD2) {
+			dev_err(dma_chan->device->dev,
+				"Pad on offset %d overwritten, disabling\n",
+				i);
+			err = -ENODEV;
+		}
+		if (err != 0)
+			goto free_resources;
+	}
+
+free_resources:
+	mv_xor_free_chan_resources(dma_chan);
+out:
+	kfree(src);
+	kfree(dest);
+	return err;
+}
+
 #define MV_XOR_NUM_SRC_TEST 4 /* must be <= 15 */
 static int
 mv_xor_xor_self_test(struct mv_xor_chan *mv_chan)
@@ -1200,6 +1300,11 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 
 	if (dma_has_cap(DMA_MEMCPY, dma_dev->cap_mask)) {
 		ret = mv_xor_memcpy_self_test(mv_chan);
+		dev_dbg(&pdev->dev, "memcpy self test returned %d\n", ret);
+		if (ret)
+			goto err_free_irq;
+
+		ret = mv_xor_memcpy_min_self_test(mv_chan);
 		dev_dbg(&pdev->dev, "memcpy self test returned %d\n", ret);
 		if (ret)
 			goto err_free_irq;
