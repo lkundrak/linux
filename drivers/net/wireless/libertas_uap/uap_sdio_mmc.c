@@ -52,10 +52,6 @@ static u8 sd_ireg = 0;
 ********************************************************/
 extern u8 *helper_name;
 extern u8 *fw_name;
-/** Default helper name */
-#define DEFAULT_HELPER_NAME "mrvl/helper_sd.bin"
-/** Default firmware name */
-#define DEFAULT_FW_NAME "mrvl/sd8688_ap.bin"
 
 /********************************************************
 		Local Functions
@@ -850,12 +846,6 @@ sbi_register_dev(uap_private * priv)
     }
     priv->hotplug_device = &func->dev;
 
-    if (helper_name == NULL) {
-        helper_name = DEFAULT_HELPER_NAME;
-    }
-    if (fw_name == NULL) {
-        fw_name = DEFAULT_FW_NAME;
-    }
     sdio_release_host(func);
 
     sdio_set_drvdata(func, card);

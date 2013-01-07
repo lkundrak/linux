@@ -33,6 +33,11 @@ Change log:
 
 #include	"uap_headers.h"
 
+/** Default helper name */
+#define DEFAULT_HELPER_NAME "mrvl/helper_sd.bin"
+/** Default firmware name */
+#define DEFAULT_FW_NAME "mrvl/sd8688_ap.bin"
+
 /** The number of times to try when waiting for downloaded firmware to
      become active. (polling the scratch register). */
 #define MAX_FIRMWARE_POLL_TRIES		100

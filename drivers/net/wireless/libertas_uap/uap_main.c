@@ -45,9 +45,9 @@ uap_private *uappriv = NULL;
 u32 drvdbg = DEFAULT_DEBUG_MASK;
 #endif
 /** Helper name */
-char *helper_name = NULL;
+char *helper_name = DEFAULT_HELPER_NAME;
 /** Firmware name */
-char *fw_name = NULL;
+char *fw_name = DEFAULT_FW_NAME;
 
 /** Semaphore for add/remove card */
 SEMAPHORE AddRemoveCardSem;
@@ -1795,3 +1795,5 @@ MODULE_DESCRIPTION("M-UAP Driver");
 MODULE_AUTHOR("Marvell International Ltd.");
 MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL");
+MODULE_FIRMWARE(DEFAULT_HELPER_NAME);
+MODULE_FIRMWARE(DEFAULT_FW_NAME);
