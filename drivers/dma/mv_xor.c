@@ -954,8 +954,6 @@ static int mv_xor_memcpy_self_test(struct mv_xor_chan *mv_chan)
 		goto free_resources;
 	}
 
-	dma_sync_single_for_cpu(dma_chan->device->dev, dest_dma,
-				MV_XOR_TEST_SIZE, DMA_FROM_DEVICE);
 	if (memcmp(src, dest, MV_XOR_TEST_SIZE)) {
 		dev_err(dma_chan->device->dev,
 			"Self-test copy failed compare, disabling\n");
@@ -1048,8 +1046,6 @@ mv_xor_xor_self_test(struct mv_xor_chan *mv_chan)
 		goto free_resources;
 	}
 
-	dma_sync_single_for_cpu(dma_chan->device->dev, dest_dma,
-				PAGE_SIZE, DMA_FROM_DEVICE);
 	for (i = 0; i < (PAGE_SIZE / sizeof(u32)); i++) {
 		u32 *ptr = page_address(dest);
 		if (ptr[i] != cmp_word) {
