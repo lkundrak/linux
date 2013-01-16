@@ -1036,7 +1036,7 @@ mv_xor_xor_self_test(struct mv_xor_chan *mv_chan)
 
 	/* test xor */
 	dest_dma = dma_map_page(dma_chan->device->dev, dest, 0, PAGE_SIZE,
-				DMA_FROM_DEVICE);
+				DMA_BIDIRECTIONAL);
 	if (dma_mapping_error(dma_chan->device->dev, dest_dma)) {
 		dev_err(dma_chan->device->dev,
 			"Could not map destination page, disabling\n");
