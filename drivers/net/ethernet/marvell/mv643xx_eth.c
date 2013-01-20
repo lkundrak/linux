@@ -519,8 +519,13 @@ static int rxq_process(struct rx_queue *rxq, int budget)
 		if (rxq->rx_curr_desc == rxq->rx_ring_size)
 			rxq->rx_curr_desc = 0;
 
-		dma_unmap_single(mp->dev->dev.parent, rx_desc->buf_ptr,
-				 rx_desc->buf_size, DMA_FROM_DEVICE);
+		if (dma_mapping_error(mp->dev->dev.parent, rx_desc->buf_ptr)) {
+			dev_err(mp->dev->dev.parent,
+				"Receive buffer could not be mapped, skipping unmap.\n");
+		} else {
+			dma_unmap_single(mp->dev->dev.parent, rx_desc->buf_ptr,
+					 rx_desc->buf_size, DMA_FROM_DEVICE);
+		}
 		rxq->rx_desc_count--;
 		rx++;
 
@@ -902,12 +907,19 @@ static int txq_reclaim(struct tx_queue *txq, int budget, int force)
 			mp->dev->stats.tx_errors++;
 		}
 
-		if (cmd_sts & TX_FIRST_DESC) {
-			dma_unmap_single(mp->dev->dev.parent, desc->buf_ptr,
-					 desc->byte_cnt, DMA_TO_DEVICE);
+		if (dma_mapping_error(mp->dev->dev.parent, desc->buf_ptr)) {
+			dev_err(mp->dev->dev.parent,
+				"Transmit buffer could not be mapped, skipping unmap.\n");
 		} else {
-			dma_unmap_page(mp->dev->dev.parent, desc->buf_ptr,
-				       desc->byte_cnt, DMA_TO_DEVICE);
+			if (cmd_sts & TX_FIRST_DESC) {
+				dma_unmap_single(mp->dev->dev.parent,
+						desc->buf_ptr, desc->byte_cnt,
+						DMA_TO_DEVICE);
+			} else {
+				dma_unmap_page(mp->dev->dev.parent,
+						desc->buf_ptr, desc->byte_cnt,
+						DMA_TO_DEVICE);
+			}
 		}
 
 		dev_kfree_skb(skb);
