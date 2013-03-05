@@ -382,6 +382,23 @@ config ARCH_BCM2835
 	  This enables support for the Broadcom BCM2835 SoC. This SoC is
 	  use in the Raspberry Pi, and Roku 2 devices.
 
+config ARCH_BCM2708
+	bool "Broadcom BCM2708 family"
+	select CPU_V6
+	select ARM_AMBA
+	select HAVE_CLK
+	select HAVE_SCHED_CLOCK
+	select NEED_MACH_MEMORY_H
+	select CLKDEV_LOOKUP
+	select ARCH_HAS_CPUFREQ
+	select GENERIC_CLOCKEVENTS
+	select ARM_ERRATA_411920
+	select MACH_BCM2708
+	select VC4
+	select FIQ
+	help
+	  This enables support for Broadcom BCM2708 boards.
+
 config ARCH_CNS3XXX
 	bool "Cavium Networks CNS3XXX family"
 	select ARM_GIC
@@ -978,7 +995,6 @@ config ARCH_OMAP1
 	select NEED_MACH_MEMORY_H
 	help
 	  Support for older TI OMAP1 (omap7xx, omap15xx or omap16xx)
-
 endchoice
 
 menu "Multiple platform selection"
@@ -1141,6 +1157,7 @@ source "arch/arm/mach-virt/Kconfig"
 source "arch/arm/mach-vt8500/Kconfig"
 
 source "arch/arm/mach-w90x900/Kconfig"
+source "arch/arm/mach-bcm2708/Kconfig"
 
 source "arch/arm/mach-zynq/Kconfig"
 
