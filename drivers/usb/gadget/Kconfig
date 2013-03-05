@@ -493,6 +493,12 @@ config USB_DUMMY_HCD
 
 endmenu
 
+config USB_DWC_OTG_LPM
+	boolean "Enable LPM support"
+	depends on USB && EXPERIMENTAL
+	help
+	   Enables LPM support.
+
 #
 # USB Gadget Drivers
 #

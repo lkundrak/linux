@@ -25,7 +25,6 @@
 #include <linux/kthread.h>
 #include <linux/mutex.h>
 #include <linux/freezer.h>
-#include <linux/random.h>
 #include <linux/pm_qos.h>
 
 #include <asm/uaccess.h>
@@ -2094,6 +2093,12 @@ static inline void announce_device(struct usb_device *udev) { }
 #endif
 
 #ifdef	CONFIG_USB_OTG
+
+static int enable_whitelist;
+module_param(enable_whitelist, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(enable_whitelist,
+		 "only recognize devices in OTG whitelist if true");
+
 #include "otg_whitelist.h"
 #endif
 
@@ -2148,9 +2153,15 @@ static int usb_enumerate_device_otg(struct usb_device *udev)
 					dev_info(&udev->dev,
 						"can't set HNP mode: %d\n",
 						err);
+					dev_printk(KERN_CRIT, &udev->dev,
+						"Not Connected/Responding\n");
+
 					bus->b_hnp_enable = 0;
+				} else {
+					dev_info(&udev->dev,
+						"HNP Not Supported\n");
 				}
-			}
+                        }
 		}
 	}
 
@@ -2159,12 +2170,27 @@ static int usb_enumerate_device_otg(struct usb_device *udev)
 		/* Maybe it can talk to us, though we can't talk to it.
 		 * (Includes HNP test device.)
 		 */
-		if (udev->bus->b_hnp_enable || udev->bus->is_b_host) {
+		if (udev->bus->b_hnp_enable || udev->bus->is_b_host ||
+		    udev->descriptor.idVendor == 0x1a0a) {
 			err = usb_port_suspend(udev, PMSG_SUSPEND);
-			if (err < 0)
+			if (err < 0) {
 				dev_dbg(&udev->dev, "HNP fail, %d\n", err);
+			} else {
+			    /* Return Connection Refused(ECONNREFUSED)
+			     * instead of No Device(ENODEV) so that the
+			     * retry loop in hub_port_connect_change() is
+			     * exited without disabling the port
+			     */
+			    err = -ECONNREFUSED;
+			    goto fail;
+			}
 		}
-		err = -ENOTSUPP;
+		//err = -ENOTSUPP;
+		/* Return Not Connected (ENOTCONN) instead of No
+		 * Device(ENODEV) so that the retry loop in
+		 * hub_port_connect_change() is exited
+		 */
+		err = -ENOTCONN;
 		goto fail;
 	}
 fail:
@@ -2306,14 +2332,6 @@ int usb_new_device(struct usb_device *udev)
 
 	/* Tell the world! */
 	announce_device(udev);
-
-	if (udev->serial)
-		add_device_randomness(udev->serial, strlen(udev->serial));
-	if (udev->product)
-		add_device_randomness(udev->product, strlen(udev->product));
-	if (udev->manufacturer)
-		add_device_randomness(udev->manufacturer,
-				      strlen(udev->manufacturer));
 
 	device_enable_async_suspend(&udev->dev);
 
@@ -2983,9 +3001,9 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 			status = 0;
 	} else {
 		/* device has up to 10 msec to fully suspend */
-		dev_dbg(&udev->dev, "usb %ssuspend, wakeup %d\n",
+		/*dev_dbg(&udev->dev, "usb %ssuspend, wakeup %d\n",
 				(PMSG_IS_AUTO(msg) ? "auto-" : ""),
-				udev->do_remote_wakeup);
+				udev->do_remote_wakeup);*/
 		usb_set_device_state(udev, USB_STATE_SUSPENDED);
 		udev->port_is_suspended = 1;
 		msleep(10);
@@ -4057,7 +4075,9 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 				buf->bMaxPacketSize0 = 0;
 				r = usb_control_msg(udev, usb_rcvaddr0pipe(),
 					USB_REQ_GET_DESCRIPTOR, USB_DIR_IN,
-					USB_DT_DEVICE << 8, 0,
+					USB_DT_DEVICE << 8,
+					//USB_DT_DEVICE << 64, // DWC patch suggestion!
+					0,
 					buf, GET_DESCRIPTOR_BUFSIZE,
 					initial_descriptor_timeout);
 				switch (buf->bMaxPacketSize0) {
@@ -4521,8 +4541,10 @@ loop:
 		release_devnum(udev);
 		hub_free_dev(udev);
 		usb_put_dev(udev);
-		if ((status == -ENOTCONN) || (status == -ENOTSUPP))
-			break;
+		if (status == -ENOTCONN || status == -ENOTSUPP ||
+			status == -ECONNREFUSED)
+			// break; //DWC patch
+			return;
 	}
 	if (hub->hdev->parent ||
 			!hcd->driver->port_handed_over ||
