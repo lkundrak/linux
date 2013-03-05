@@ -29,6 +29,12 @@
 			#interrupt-cells = <2>;
 		};
 
+		vchiq: vchiq {
+			compatible = "brcm,bcm2835-vchiq";
+			reg = <0x7e00b800 0x50>;
+			interrupts = <0 2>;
+		};
+
 		mailbox: mailbox {
 			compatible = "brcm,bcm2835-mbox";
 			reg = <0x7e00b880 0x40>;
