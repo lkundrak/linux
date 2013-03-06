@@ -11,6 +11,7 @@ config ARCH_BCM2835
 	select GENERIC_CLOCKEVENTS
 	select PINCTRL
 	select PINCTRL_BCM2835
+	select VIRT_TO_BUS
 	help
 	  This enables support for the Broadcom BCM2835 SoC. This SoC is
 	  use in the Raspberry Pi, and Roku 2 devices.
