@@ -2060,15 +2060,17 @@ static void dwc2_hc_intr(struct dwc2_hsotg *hsotg)
 }
 
 /* This function handles interrupts for the HCD */
-int dwc2_hcd_intr(struct dwc2_hsotg *hsotg)
+irqreturn_t dwc2_hcd_intr(struct dwc2_hsotg *hsotg)
 {
 	u32 gintsts, dbg_gintsts;
-	int retval = 0;
+	irqreturn_t retval;
 
 	if (dwc2_check_core_status(hsotg) < 0) {
 		dev_warn(hsotg->dev, "Controller is disconnected\n");
 		return 0;
 	}
+
+	retval = dwc2_handle_common_intr(0, hsotg);
 
 	spin_lock(&hsotg->lock);
 
@@ -2079,8 +2081,6 @@ int dwc2_hcd_intr(struct dwc2_hsotg *hsotg)
 			spin_unlock(&hsotg->lock);
 			return 0;
 		}
-
-		retval = 1;
 
 		dbg_gintsts = gintsts;
 #ifndef DEBUG_SOF
@@ -2096,21 +2096,35 @@ int dwc2_hcd_intr(struct dwc2_hsotg *hsotg)
 				 "DWC OTG HCD Interrupt Detected gintsts&gintmsk=0x%08x\n",
 				 gintsts);
 
-		if (gintsts & GINTSTS_SOF)
+		if (gintsts & GINTSTS_SOF) {
 			dwc2_sof_intr(hsotg);
-		if (gintsts & GINTSTS_RXFLVL)
+			retval = IRQ_HANDLED;
+		}
+		if (gintsts & GINTSTS_RXFLVL) {
 			dwc2_rx_fifo_level_intr(hsotg);
-		if (gintsts & GINTSTS_NPTXFEMP)
+			retval = IRQ_HANDLED;
+		}
+		if (gintsts & GINTSTS_NPTXFEMP) {
 			dwc2_np_tx_fifo_empty_intr(hsotg);
-		if (gintsts & GINTSTS_I2CINT)
+			retval = IRQ_HANDLED;
+		}
+		if (gintsts & GINTSTS_I2CINT) {
 			/* Todo: Implement i2cintr handler */
 			writel(GINTSTS_I2CINT, hsotg->regs + GINTSTS);
-		if (gintsts & GINTSTS_PRTINT)
+			retval = IRQ_HANDLED;
+		}
+		if (gintsts & GINTSTS_PRTINT) {
 			dwc2_port_intr(hsotg);
-		if (gintsts & GINTSTS_HCHINT)
+			retval = IRQ_HANDLED;
+		}
+		if (gintsts & GINTSTS_HCHINT) {
 			dwc2_hc_intr(hsotg);
-		if (gintsts & GINTSTS_PTXFEMP)
+			retval = IRQ_HANDLED;
+		}
+		if (gintsts & GINTSTS_PTXFEMP) {
 			dwc2_perio_tx_fifo_empty_intr(hsotg);
+			retval = IRQ_HANDLED;
+		}
 
 		if (dbg_gintsts) {
 			dev_vdbg(hsotg->dev,
