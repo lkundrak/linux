@@ -121,6 +121,11 @@
 		brcm,bcm2835-mbox = <&mailbox>;
 	};
 
+	fb {
+		compatible = "brcm,bcm2835-fb";
+		brcm,bcm2835-mbox = <&mailbox>;
+	};
+
 	clocks {
 		compatible = "simple-bus";
 		#address-cells = <1>;
