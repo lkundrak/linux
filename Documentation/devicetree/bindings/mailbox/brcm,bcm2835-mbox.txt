@@ -1,0 +1,15 @@
+Broadcom BCM2835 VideoCore mailbox IPC
+
+Required properties:
+
+- compatible : should be "brcm,bcm2835-mbox"
+- reg : Specifies base physical address and size of the registers.
+- interrupts : the interrupt number
+
+Example:
+
+mailbox {
+	compatible = "brcm,bcm2835-mbox";
+	reg = <0x7e00b800 0x400>;
+	interrupts = <0 1>;
+};

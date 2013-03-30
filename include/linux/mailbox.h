@@ -15,3 +15,6 @@
 int pl320_ipc_transmit(u32 *data);
 int pl320_ipc_register_notifier(struct notifier_block *nb);
 int pl320_ipc_unregister_notifier(struct notifier_block *nb);
+
+int __must_check bcm2835_mbox_io(unsigned chan, u32 in28, u32 *out28);
+int __must_check bcm2835_mbox_property(dma_addr_t mem_bus);
