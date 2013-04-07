@@ -111,6 +111,11 @@
 		};
 	};
 
+	thermal {
+		compatible = "brcm,bcm2835-thermal";
+		brcm,bcm2835-mbox = <&mailbox>;
+	};
+
 	clocks {
 		compatible = "simple-bus";
 		#address-cells = <1>;
