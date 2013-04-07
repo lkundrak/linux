@@ -1,0 +1,13 @@
+Broadcom BCM2835 thermal sensor
+
+Required properties:
+
+- compatible : should be "brcm,bcm2835-thermal"
+- brcm,bcm2835-mbox : mailbox used to talk to the thermal sensor
+
+Example:
+
+thermal {
+	compatible = "brcm,bcm2835-thermal";
+	brcm,bcm2835-mbox = <&mailbox>;
+};
