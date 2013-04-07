@@ -1,0 +1,13 @@
+Broadcom BCM2835 framebuffer
+
+Required properties:
+
+- compatible : should be "brcm,bcm2835-fb"
+- brcm,bcm2835-mbox : mailbox used to set up the framebuffer
+
+Example:
+
+fb {
+	compatible = "brcm,bcm2835-fb";
+	brcm,bcm2835-mbox = <&mailbox>;
+};
