@@ -19,6 +19,7 @@
 #include <linux/of_platform.h>
 #include <linux/clk/bcm2835.h>
 #include <linux/clocksource.h>
+#include <linux/dma-mapping.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -124,6 +125,11 @@ static void __init bcm2835_init(void)
 	}
 }
 
+static void __init bcm2835_init_early(void)
+{
+	init_dma_coherent_pool_size(SZ_4M);
+}
+
 static const char * const bcm2835_compat[] = {
 	"brcm,bcm2835",
 	NULL
@@ -134,6 +140,7 @@ DT_MACHINE_START(BCM2835, "BCM2835")
 	.init_irq = bcm2835_init_irq,
 	.handle_irq = bcm2835_handle_irq,
 	.init_machine = bcm2835_init,
+	.init_early = bcm2835_init_early,
 	.init_time = clocksource_of_init,
 	.restart = bcm2835_restart,
 	.dt_compat = bcm2835_compat
