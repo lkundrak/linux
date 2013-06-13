@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/cpufreq.h>
+#include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/mailbox.h>
 #include <linux/platform_device.h>
@@ -52,6 +53,8 @@ struct vc_msg {
 	u32 end_tag;		/* an end identifier, should be set to NULL */
 } __packed;
 
+static struct device *mbox;
+
 /* clk_rate either gets or sets the clock rates.  */
 static u32 bcm2835_cpufreq_set_clock(int cur_rate, int arm_rate)
 {
@@ -78,7 +81,7 @@ static u32 bcm2835_cpufreq_set_clock(int cur_rate, int arm_rate)
 	msg->tag.val = arm_rate * 1000;
 
 	/* send the message */
-	ret = bcm2835_mbox_property(msg_bus);
+	ret = bcm2835_mbox_property(mbox, msg_bus);
 
 	/* check if it was all ok and return the rate in KHz */
 	if (ret == 0 && (msg->request_code & 0x80000000))
@@ -111,7 +114,7 @@ static u32 bcm2835_cpufreq_get_clock(int tag)
 	msg->tag.dev_id = VCMSG_ID_ARM_CLOCK;
 
 	/* send the message */
-	ret = bcm2835_mbox_property(msg_bus);
+	ret = bcm2835_mbox_property(mbox, msg_bus);
 
 	/* check if it was all ok and return the rate in KHz */
 	if (ret == 0 && (msg->request_code & 0x80000000))
@@ -193,6 +196,10 @@ static int bcm2835_cpufreq_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct device *dev = &pdev->dev;
+
+	ret = bcm2835_mbox_init(&mbox);
+	if (ret != 0)
+		return ret;
 
 	ret = cpufreq_register_driver(&bcm2835_cpufreq);
 	if (ret) {

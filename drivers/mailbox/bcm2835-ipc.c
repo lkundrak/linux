@@ -54,10 +54,11 @@
 #define MBOX_CHAN(msg)			((msg) & 0xf)
 #define MBOX_DATA28(msg)		((msg) & ~0xf)
 
+static bool bcm2835_mbox_probed;
 static struct device *bcm2835_mbox_dev;	/* we assume there's only one! */
 
 struct bcm2835_mbox {
-	struct device *dev;
+	//struct device *dev;
 	void __iomem *regs;
 	struct {
 		u32 msg;
@@ -68,8 +69,8 @@ struct bcm2835_mbox {
 
 static irqreturn_t bcm2835_mbox_irq(int irq, void *dev_id)
 {
-	struct bcm2835_mbox *mbox = (struct bcm2835_mbox *)dev_id;
-	struct device *dev = mbox->dev;
+	struct device *dev = (struct device *)dev_id;
+	struct bcm2835_mbox *mbox = dev_get_drvdata(dev);
 	int ret = IRQ_NONE;
 
 	/* wait for the mailbox FIFO to have some data in it */
@@ -96,6 +97,19 @@ static irqreturn_t bcm2835_mbox_irq(int irq, void *dev_id)
 	return ret;
 }
 
+int bcm2835_mbox_init(struct device **dev)
+{
+	*dev = bcm2835_mbox_dev;
+
+	if (!bcm2835_mbox_probed)
+		return -EPROBE_DEFER;
+	if (!bcm2835_mbox_dev)
+		return -ENODEV;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bcm2835_mbox_init);
+
 /**
  * bcm2835_mbox_io() - send a message to BCM2835 mailbox and read a reply
  * @chan:	Channel number
@@ -113,25 +127,20 @@ static irqreturn_t bcm2835_mbox_irq(int irq, void *dev_id)
  * Return: 0 in case of success, otherwise an error code
  */
 
-int bcm2835_mbox_io(unsigned chan, u32 in28, u32 *out28)
+int bcm2835_mbox_io(struct device *dev, unsigned chan, u32 in28, u32 *out28)
 {
-	struct bcm2835_mbox *mbox;
+	struct bcm2835_mbox *mbox = dev_get_drvdata(dev);
 	int timeout;
 	int ret = 0;
 
-	if (!bcm2835_mbox_dev)
-		return -ENODEV;
-
-	mbox = dev_get_drvdata(bcm2835_mbox_dev);
-
-	device_lock(bcm2835_mbox_dev);
+	device_lock(dev);
 	/* wait for the mailbox FIFO to have some space in it */
 	while (readl(mbox->regs + MAIL0_STA) & ARM_MS_FULL)
 		cpu_relax();
 
 	mutex_lock(&mbox->chan[chan].lock);
 	writel(MBOX_MSG(chan, in28), mbox->regs + MAIL0_WRT);
-	device_unlock(bcm2835_mbox_dev);
+	device_unlock(dev);
 
 	/* Don't wait for a response. */
 	if (out28 == NULL)
@@ -140,7 +149,7 @@ int bcm2835_mbox_io(unsigned chan, u32 in28, u32 *out28)
 	timeout = wait_for_completion_timeout(&mbox->chan[chan].comp,
 						BCM2835_MBOX_TIMEOUT);
 	if (timeout  == 0) {
-		dev_warn(bcm2835_mbox_dev, "Channel %d timeout\n", chan);
+		dev_warn(dev, "Channel %d timeout\n", chan);
 		ret = -ETIMEDOUT;
 		goto out;
 	}
@@ -165,16 +174,16 @@ EXPORT_SYMBOL_GPL(bcm2835_mbox_io);
  * Return: 0 in case of success, otherwise an error code
  */
 
-int bcm2835_mbox_property(dma_addr_t mem_bus)
+int bcm2835_mbox_property(struct device *dev, dma_addr_t mem_bus)
 {
 	int ret;
 	int val;
 
 	wmb();
-	ret = bcm2835_mbox_io(MBOX_CHAN_PROPERTY, (u32)mem_bus, (u32 *)&val);
+	ret = bcm2835_mbox_io(dev, MBOX_CHAN_PROPERTY, (u32)mem_bus, (u32 *)&val);
 	rmb();
 	if (mem_bus != val) {
-		dev_warn(bcm2835_mbox_dev, "Bad response from property mailbox\n");
+		dev_warn(dev, "Bad response from property mailbox\n");
 		return -EIO;
 	}
 
@@ -194,6 +203,7 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
 	if (mbox == NULL) {
 		dev_err(dev, "Failed to allocate mailbox memory\n");
+		bcm2835_mbox_probed = true;
 		return -ENOMEM;
 	}
 
@@ -205,23 +215,26 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, mbox);
-	mbox->dev = dev;
+	dev_set_drvdata(dev, mbox);
 
 	irq = irq_of_parse_and_map(np, 0);
 	if (irq <= 0) {
 		dev_err(dev, "Can't get IRQ number for mailbox\n");
+		bcm2835_mbox_probed = true;
 		return -ENODEV;
 	}
 	ret = devm_request_irq(dev, irq, bcm2835_mbox_irq, IRQF_SHARED,
-						dev_name(dev), mbox);
+						dev_name(dev), dev);
 	if (ret) {
 		dev_err(dev, "Failed to register a mailbox IRQ handler\n");
+		bcm2835_mbox_probed = true;
 		return -ENODEV;
 	}
 
 	mbox->regs = of_iomap(np, 0);
 	if (!mbox->regs) {
 		dev_err(dev, "Failed to remap mailbox regs\n");
+		bcm2835_mbox_probed = true;
 		return -ENODEV;
 	}
 
@@ -230,13 +243,16 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 
 	dev_info(dev, "Broadcom BCM2835 mailbox IPC");
 	bcm2835_mbox_dev = dev;
+	bcm2835_mbox_probed = true;
 
 	return 0;
 }
 
 static int bcm2835_mbox_remove(struct platform_device *pdev)
 {
+	bcm2835_mbox_probed = false;
 	bcm2835_mbox_dev = NULL;
+
 	return 0;
 }
 
@@ -256,12 +272,6 @@ static struct platform_driver bcm2835_mbox_driver = {
 	.remove		= bcm2835_mbox_remove,
 };
 module_platform_driver(bcm2835_mbox_driver);
-
-static int __init bcm2835_mbox_init(void)
-{
-	return platform_driver_register(&bcm2835_mbox_driver);
-}
-arch_initcall(bcm2835_mbox_init);
 
 MODULE_AUTHOR("Lubomir Rintel");
 MODULE_DESCRIPTION("BCM2835 mailbox IPC driver");

@@ -94,6 +94,7 @@ static ssize_t bcm2835_get_temp(struct device *dev,
 	dma_addr_t msg_bus;
 	struct vc_msg *msg;
 	int tag_id;
+	struct device *mbox = dev_get_drvdata(dev);
 
 	/* determine the message type */
 	if (index == TEMP)
@@ -113,7 +114,7 @@ static ssize_t bcm2835_get_temp(struct device *dev,
 	msg->tag.buffer_size = 8;
 
 	/* send the message */
-	result = bcm2835_mbox_property(msg_bus);
+	result = bcm2835_mbox_property(mbox, msg_bus);
 
 	/* check if it was all ok and return the rate in milli degrees C */
 	if (result == 0 && (msg->request_code & 0x80000000))
@@ -128,14 +129,22 @@ static int bcm2835_hwmon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device *hwmon_dev;
+	struct device *mbox;
+	int ret;
 
-	/* create the sysfs files */
+	/* Initialize the mbox API */
+	ret = bcm2835_mbox_init(&mbox);
+	if (ret != 0)
+		return ret;
+	dev_set_drvdata(dev, mbox);
+
+	/* Create the sysfs files */
 	if (sysfs_create_group(&dev->kobj, &bcm2835_attr_group)) {
 		dev_err(dev, "Could not create sysfs group\n");
 		return -EFAULT;
 	}
 
-	/* register the hwmon device */
+	/* Register the hwmon device */
 	hwmon_dev = hwmon_device_register(dev);
 	if (IS_ERR(hwmon_dev)) {
 		dev_err(dev, "Could not register hwmon device\n");

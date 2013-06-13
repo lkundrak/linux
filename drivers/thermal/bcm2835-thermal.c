@@ -48,6 +48,7 @@ static int bcm2835_thermal_get_temp_or_max(struct thermal_zone_device *thermal,
 	int result = -1, retry = 3;
 	dma_addr_t msg_bus;
 	struct bcm2835_msg *msg;
+	struct device *mbox = (struct device *)thermal->devdata;
 
 	msg = dma_alloc_coherent(NULL, PAGE_ALIGN(sizeof(*msg)), &msg_bus,
 								GFP_KERNEL);
@@ -66,7 +67,7 @@ static int bcm2835_thermal_get_temp_or_max(struct thermal_zone_device *thermal,
 		msg->tag.tag_id = tag_id;
 
 		/* send the message */
-		result = bcm2835_mbox_property(msg_bus);
+		result = bcm2835_mbox_property(mbox, msg_bus);
 		if (!(msg->request_code & 0x80000000))
 			result = -1;
 	}
@@ -120,9 +121,15 @@ static int bcm2835_thermal_probe(struct platform_device *pdev)
 {
 	struct thermal_zone_device *thermal;
 	struct device *dev = &pdev->dev;
+	struct device *mbox;
+	int ret;
+
+	ret = bcm2835_mbox_init(&mbox);
+	if (ret != 0)
+		return ret;
 
 	thermal = thermal_zone_device_register(
-				"bcm2835_thermal", 1, 0, NULL,
+				"bcm2835_thermal", 1, 0, mbox,
 				&ops, NULL, 1000, 1000);
 	if (!thermal) {
 		dev_err(dev, "Unable to register the thermal device\n");

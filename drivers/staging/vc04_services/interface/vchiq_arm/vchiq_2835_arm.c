@@ -102,8 +102,14 @@ vchiq_platform_init(struct platform_device *pdev, VCHIQ_STATE_T *state)
 	int err;
 	int i;
         struct device *dev = &pdev->dev;
+        struct device *mbox;
         struct device_node *np = dev->of_node;
 	int irq;
+
+	err = bcm2835_mbox_init(&mbox);
+	if (err != 0)
+		return err;
+	dev_set_drvdata(dev, mbox);
 
 	/* Allocate space for the channels in coherent memory */
 	g_slot_mem_size = PAGE_ALIGN(TOTAL_SLOTS * VCHIQ_SLOT_SIZE);
@@ -172,8 +178,7 @@ vchiq_platform_init(struct platform_device *pdev, VCHIQ_STATE_T *state)
 
 	dsb(); /* Ensure all writes have completed */
 
-	//bcm_mailbox_write(MBOX_CHAN_VCHIQ, (unsigned int)g_slot_phys);
-	err = bcm2835_mbox_io(MBOX_CHAN_VCHIQ, (unsigned int)g_slot_phys | 0x40000000, NULL);
+	err = bcm2835_mbox_io(mbox, MBOX_CHAN_VCHIQ, (unsigned int)g_slot_phys | 0x40000000, NULL);
 	if (err < 0) {
 		dev_err(dev, "Missed acknowledgement\n");
 		err = -ENODEV;

@@ -44,6 +44,7 @@ struct fbinfo_s {
 struct bcm2835_fb {
 	struct fb_info fb;
 	struct fbinfo_s *info;
+	struct device *mbox;
 	dma_addr_t dma;
 	u32 cmap[16];
 };
@@ -185,7 +186,7 @@ static int bcm2835_fb_set_par(struct fb_info *info)
 
 	/* ensure last write to fbinfo is visible to GPU */
 	wmb();
-	ret = bcm2835_mbox_io(MBOX_CHAN_FB, TO_VC_PHYS(fb->dma), &val);
+	ret = bcm2835_mbox_io(fb->mbox, MBOX_CHAN_FB, TO_VC_PHYS(fb->dma), &val);
 	rmb();
 	if (ret != 0)
 		return ret;
@@ -303,6 +304,7 @@ static int fbdepth = 16;	/* module parameter */
 static int bcm2835_fb_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct device *mbox;
 	struct bcm2835_fb *fb;
 	dma_addr_t dma;
 	void *mem;
@@ -314,6 +316,11 @@ static int bcm2835_fb_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 	platform_set_drvdata(pdev, fb);
+
+	ret = bcm2835_mbox_init(&mbox);
+	if (ret != 0)
+		return ret;
+	fb->mbox = mbox;
 
 	mem = dmam_alloc_coherent(dev, PAGE_ALIGN(sizeof(*fb->info)),
 						&dma, GFP_KERNEL);
