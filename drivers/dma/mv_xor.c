@@ -665,9 +665,8 @@ mv_xor_prep_dma_memcpy(struct dma_chan *chan, dma_addr_t dest, dma_addr_t src,
 	dev_dbg(mv_chan_to_devp(mv_chan),
 		"%s dest: %x src %x len: %u flags: %ld\n",
 		__func__, dest, src, len, flags);
-	if (unlikely(len < MV_XOR_MIN_BYTE_COUNT))
-		return NULL;
 
+	BUG_ON(len < MV_XOR_MIN_BYTE_COUNT);
 	BUG_ON(len > MV_XOR_MAX_BYTE_COUNT);
 
 	spin_lock_bh(&mv_chan->lock);
@@ -704,9 +703,8 @@ mv_xor_prep_dma_memset(struct dma_chan *chan, dma_addr_t dest, int value,
 	dev_dbg(mv_chan_to_devp(mv_chan),
 		"%s dest: %x len: %u flags: %ld\n",
 		__func__, dest, len, flags);
-	if (unlikely(len < MV_XOR_MIN_BYTE_COUNT))
-		return NULL;
 
+	BUG_ON(len < MV_XOR_MIN_BYTE_COUNT);
 	BUG_ON(len > MV_XOR_MAX_BYTE_COUNT);
 
 	spin_lock_bh(&mv_chan->lock);
@@ -738,9 +736,7 @@ mv_xor_prep_dma_xor(struct dma_chan *chan, dma_addr_t dest, dma_addr_t *src,
 	struct mv_xor_desc_slot *sw_desc, *grp_start;
 	int slot_cnt;
 
-	if (unlikely(len < MV_XOR_MIN_BYTE_COUNT))
-		return NULL;
-
+	BUG_ON(len < MV_XOR_MIN_BYTE_COUNT);
 	BUG_ON(len > MV_XOR_MAX_BYTE_COUNT);
 
 	dev_dbg(mv_chan_to_devp(mv_chan),

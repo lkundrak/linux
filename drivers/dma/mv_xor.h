@@ -163,7 +163,7 @@ struct mv_xor_desc {
 #define mv_hw_desc_slot_idx(hw_desc, idx)	\
 	((void *)(((unsigned long)hw_desc) + ((idx) << 5)))
 
-#define MV_XOR_MIN_BYTE_COUNT	(128)
+#define MV_XOR_MIN_BYTE_COUNT	6
 #define XOR_MAX_BYTE_COUNT	((16 * 1024 * 1024) - 1)
 #define MV_XOR_MAX_BYTE_COUNT	XOR_MAX_BYTE_COUNT
 
