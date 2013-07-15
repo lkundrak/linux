@@ -38,6 +38,7 @@
 
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
+#include <media/v4l2-ctrls.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-vmalloc.h>
 
@@ -77,6 +78,7 @@ struct usbtv {
 	struct device *dev;
 	struct usb_device *udev;
 	struct v4l2_device v4l2_dev;
+	struct v4l2_ctrl_handler ctrl;
 	struct video_device vdev;
 	struct vb2_queue vb2q;
 	struct mutex v4l2_lock;
@@ -255,6 +257,10 @@ static int usbtv_setup_capture(struct usbtv *usbtv)
 		return ret;
 
 	ret = usbtv_select_input(usbtv, usbtv->input);
+	if (ret)
+		return ret;
+
+	ret = v4l2_ctrl_handler_setup(&usbtv->ctrl);
 	if (ret)
 		return ret;
 
@@ -657,11 +663,72 @@ struct vb2_ops usbtv_vb2_ops = {
 	.stop_streaming = usbtv_stop_streaming,
 };
 
+static int usbtv_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct usbtv *usbtv = container_of(ctrl->handler, struct usbtv,
+								ctrl);
+	int pipe = usb_rcvctrlpipe(usbtv->udev, 0);
+	static u8 data[3];
+	u16 index, size;
+	int ret;
+
+	switch (ctrl->id) {
+	case V4L2_CID_BRIGHTNESS:
+		index = USBTV_BASE + 0x0244;
+		size = 3;
+		data[0] = 0x10 | (ctrl->val >> 8);
+		data[1] = 0xc0;
+		data[2] = ctrl->val & 0xff;
+		break;
+	case V4L2_CID_CONTRAST:
+		return 0;
+		index = USBTV_BASE + 0x0244;
+		size = 2;
+		data[0] = 0x01 | ((ctrl->val >> 4) & 0xf0);
+		data[1] = ctrl->val & 0xff;
+		break;
+	case V4L2_CID_SATURATION:
+		return 0;
+		index = USBTV_BASE + 0x0242;
+		data[0] = ctrl->val >> 8;
+		data[1] = ctrl->val & 0xff;
+		size = 2;
+		break;
+	case V4L2_CID_HUE:
+		return 0;
+		index = USBTV_BASE + 0x0240;
+		size = 2;
+		if (ctrl->val > 0) {
+			data[0] = 0x92 + (ctrl->val >> 8);
+			data[1] = ctrl->val & 0xff;
+		} else {
+			data[0] = 0x92 + (-ctrl->val >> 8);
+			data[1] = -ctrl->val & 0xff;
+		}
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = usb_control_msg(usbtv->udev, pipe, USBTV_REQUEST_REG,
+		USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
+		0, index, (void *)data, size, 0);
+	if (ret)
+		printk ("S_CTRL ERR=%d\n", ret);
+
+	return 0;
+}
+
+static const struct v4l2_ctrl_ops usbtv_ctrl_ops = {
+	.s_ctrl = usbtv_s_ctrl,
+};
+
 static void usbtv_release(struct v4l2_device *v4l2_dev)
 {
 	struct usbtv *usbtv = container_of(v4l2_dev, struct usbtv, v4l2_dev);
 
 	v4l2_device_unregister(&usbtv->v4l2_dev);
+	v4l2_ctrl_handler_free(&usbtv->ctrl);
 	vb2_queue_release(&usbtv->vb2q);
 	kfree(usbtv);
 }
@@ -712,7 +779,24 @@ static int usbtv_probe(struct usb_interface *intf,
 		goto usbtv_fail;
 	}
 
+	/* controls */
+	v4l2_ctrl_handler_init(&usbtv->ctrl, 4);
+	v4l2_ctrl_new_std(&usbtv->ctrl, &usbtv_ctrl_ops,
+			V4L2_CID_CONTRAST, 0, 0x3ff, 1, 0x1d0);
+	v4l2_ctrl_new_std(&usbtv->ctrl, &usbtv_ctrl_ops,
+			V4L2_CID_BRIGHTNESS, 0, 0x3ff, 1, 0x1c0);
+	v4l2_ctrl_new_std(&usbtv->ctrl, &usbtv_ctrl_ops,
+			V4L2_CID_SATURATION, 0, 0x3ff, 1, 0x200);
+	v4l2_ctrl_new_std(&usbtv->ctrl, &usbtv_ctrl_ops,
+			V4L2_CID_HUE, -0xdff, +0xdff, 1, 0x000);
+	ret = usbtv->ctrl.error;
+	if (ret < 0) {
+		dev_warn(dev, "Could not initialize controls\n");
+		goto ctrl_fail;
+	}
+
 	/* v4l2 structure */
+	usbtv->v4l2_dev.ctrl_handler = &usbtv->ctrl;
 	usbtv->v4l2_dev.release = usbtv_release;
 	ret = v4l2_device_register(dev, &usbtv->v4l2_dev);
 	if (ret < 0) {
@@ -745,6 +829,8 @@ static int usbtv_probe(struct usb_interface *intf,
 vdev_fail:
 	v4l2_device_unregister(&usbtv->v4l2_dev);
 v4l2_fail:
+ctrl_fail:
+	v4l2_ctrl_handler_free(&usbtv->ctrl);
 	vb2_queue_release(&usbtv->vb2q);
 usbtv_fail:
 	kfree(usbtv);
