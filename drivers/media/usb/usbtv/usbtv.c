@@ -210,10 +210,14 @@ static int usbtv_select_norm(struct usbtv *usbtv, v4l2_std_id norm)
 
 	ret = -EINVAL;
 
-	if (norm & V4L2_STD_525_60)
+	printk ("SETTING NORM\n");
+	if (norm & V4L2_STD_525_60) {
 		ret = usbtv_set_regs(usbtv, ntsc, ARRAY_SIZE(ntsc));
-	else if (norm & V4L2_STD_625_50)
+		printk ("NTSC V4L2_STD_525_60\n");
+	} else if (norm & V4L2_STD_625_50) {
 		ret = usbtv_set_regs(usbtv, pal, ARRAY_SIZE(pal));
+		printk ("PAL V4L2_STD_625_50\n");
+	}
 
 	if (!ret) {
 		usbtv->norm = norm;
@@ -384,6 +388,12 @@ static void usbtv_image_chunk(struct usbtv *usbtv, u32 *chunk)
 	/* Copy the chunk data. */
 	usbtv_chunk_to_vbuf(frame, &chunk[1], chunk_no, odd);
 	usbtv->chunks_done++;
+
+static int max = 0;
+if (chunk_no > max) {
+	max = chunk_no;
+	printk ("KOKOT %d --- %d\n", chunk_no, usbtv->n_chunks);
+}
 
 	/* Last chunk in a frame, signalling an end */
 	if (odd && chunk_no == usbtv->n_chunks-1) {
@@ -680,7 +690,7 @@ static int usbtv_queue_setup(struct vb2_queue *vq,
 	if (*nbuffers < 2)
 		*nbuffers = 2;
 	*nplanes = 1;
-	sizes[0] = USBTV_CHUNK * usbtv->n_chunks / 2 * sizeof(u32);
+	sizes[0] = USBTV_CHUNK * usbtv->n_chunks * 2 * sizeof(u32);
 
 	return 0;
 }
