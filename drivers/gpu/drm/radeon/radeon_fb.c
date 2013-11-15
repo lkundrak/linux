@@ -344,7 +344,7 @@ int radeon_fbdev_init(struct radeon_device *rdev)
 	int ret;
 
 	/* select 8 bpp console on RN50 or 16MB cards */
-	if (ASIC_IS_RN50(rdev) || rdev->mc.real_vram_size <= (32*1024*1024))
+	if (ASIC_IS_RN50(rdev) || rdev->mc.real_vram_size <= (16*1024*1024))
 		bpp_sel = 8;
 
 	rfbdev = kzalloc(sizeof(struct radeon_fbdev), GFP_KERNEL);
