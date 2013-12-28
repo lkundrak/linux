@@ -1,5 +1,5 @@
 /*
- * Fushicai USBTV007 Video Grabber Driver
+ * Fushicai USBTV007 Audio-Video Grabber Driver
  *
  * Product web site:
  * http://www.fushicai.com/products_detail/&productId=d05449ee-b690-42f9-a661-aa7353894bed.html
@@ -31,6 +31,8 @@
 #include <linux/module.h>
 
 #include "usbtv.h"
+
+unsigned int debug;
 
 int usbtv_set_regs(struct usbtv *usbtv, const u16 regs[][2], int size)
 {
@@ -86,8 +88,15 @@ static int usbtv_probe(struct usb_interface *intf,
 	if (ret < 0)
 		goto usbtv_video_fail;
 
-	dev_info(dev, "Fushicai USBTV007 Video Grabber\n");
+	ret = usbtv_audio_init(usbtv);
+	if (ret < 0)
+		goto usbtv_audio_fail;
+
+	dev_info(dev, "Fushicai USBTV007 Audio-Video Grabber\n");
 	return 0;
+
+usbtv_audio_fail:
+	usbtv_video_free(usbtv);
 
 usbtv_video_fail:
 	kfree(usbtv);
@@ -99,6 +108,7 @@ static void usbtv_disconnect(struct usb_interface *intf)
 {
 	struct usbtv *usbtv = usb_get_intfdata(intf);
 
+	usbtv_audio_free(usbtv);
 	usbtv_video_free(usbtv);
 
 	usb_set_intfdata(intf, NULL);
@@ -114,7 +124,7 @@ struct usb_device_id usbtv_id_table[] = {
 MODULE_DEVICE_TABLE(usb, usbtv_id_table);
 
 MODULE_AUTHOR("Lubomir Rintel");
-MODULE_DESCRIPTION("Fushicai USBTV007 Video Grabber Driver");
+MODULE_DESCRIPTION("Fushicai USBTV007 Audio-Video Grabber Driver");
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct usb_driver usbtv_usb_driver = {
@@ -125,3 +135,5 @@ struct usb_driver usbtv_usb_driver = {
 };
 
 module_usb_driver(usbtv_usb_driver);
+module_param(debug, int, 0644);
+MODULE_PARM_DESC(debug, "enable debug messages");
