@@ -1283,7 +1283,9 @@ void em28xx_unregister_extension(struct em28xx_ops *ops)
 
 	mutex_lock(&em28xx_devlist_mutex);
 	list_for_each_entry(dev, &em28xx_devlist, devlist) {
+		mutex_lock(&dev->lock);
 		ops->fini(dev);
+		mutex_unlock(&dev->lock);
 	}
 	list_del(&ops->next);
 	mutex_unlock(&em28xx_devlist_mutex);
@@ -1298,8 +1300,11 @@ void em28xx_init_extension(struct em28xx *dev)
 	mutex_lock(&em28xx_devlist_mutex);
 	list_add_tail(&dev->devlist, &em28xx_devlist);
 	list_for_each_entry(ops, &em28xx_extension_devlist, next) {
-		if (ops->init)
+		if (ops->init) {
+			mutex_lock(&dev->lock);
 			ops->init(dev);
+			mutex_unlock(&dev->lock);
+		}
 	}
 	mutex_unlock(&em28xx_devlist_mutex);
 }
@@ -1310,8 +1315,11 @@ void em28xx_close_extension(struct em28xx *dev)
 
 	mutex_lock(&em28xx_devlist_mutex);
 	list_for_each_entry(ops, &em28xx_extension_devlist, next) {
-		if (ops->fini)
+		if (ops->fini) {
+			mutex_lock(&dev->lock);
 			ops->fini(dev);
+			mutex_unlock(&dev->lock);
+		}
 	}
 	list_del(&dev->devlist);
 	mutex_unlock(&em28xx_devlist_mutex);
