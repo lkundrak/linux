@@ -238,10 +238,14 @@ static int scr24x_probe(struct pcmcia_device *link)
 	int ret;
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return -ENOMEM;
 
 	dev->devno = find_first_zero_bit(scr24x_minors, SCR24X_DEVS);
-	if (dev->devno >= SCR24X_DEVS)
-		return -EBUSY;
+	if (dev->devno >= SCR24X_DEVS) {
+		ret = -EBUSY;
+		goto err;
+	}
 
 	mutex_init(&dev->lock);
 	kref_init(&dev->refcnt);
@@ -282,7 +286,9 @@ static int scr24x_probe(struct pcmcia_device *link)
 	return 0;
 
 err:
-	clear_bit(dev->devno, scr24x_minors);
+	if (dev->devno < SCR24X_DEVS)
+		clear_bit(dev->devno, scr24x_minors);
+	kfree (dev);
 	return ret;
 }
 
