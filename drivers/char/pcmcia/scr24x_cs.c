@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/cdev.h>
+#include <linux/slab.h>
 
 #include <pcmcia/cistpl.h>
 #include <pcmcia/ds.h>
