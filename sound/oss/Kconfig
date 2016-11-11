@@ -240,7 +240,7 @@ config SOUND_AU1550_AC97
 	depends on SOUND_PRIME && SOC_AU1550
 
 config SOUND_TRIDENT
-	tristate "Trident 4DWave DX/NX, SiS 7018 or ALi 5451 PCI Audio Core"
+ 	tristate "Trident 4DWave DX/NX, SiS 7018, ALi 5451 PCI Audio Core or SiS 7019"
 	depends on SOUND_PRIME && PCI
 	---help---
 	  Say Y or M if you have a PCI sound card utilizing the Trident

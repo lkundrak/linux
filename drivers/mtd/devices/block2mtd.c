@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/mtd/mtd.h>
 #include <linux/buffer_head.h>
+#include <linux/proc_fs.h>
 
 #define VERSION "$Revision: 1.30 $"
 
@@ -39,7 +40,7 @@ struct block2mtd_dev {
 static LIST_HEAD(blkmtd_device_list);
 
 
-#define PAGE_READAHEAD 64
+#define PAGE_READAHEAD CONFIG_MTD_BLOCK2MTD_PAGE_READAHEAD
 static void cache_readahead(struct address_space *mapping, int index)
 {
 	filler_t *filler = (filler_t*)mapping->a_ops->readpage;
@@ -461,9 +462,60 @@ static int block2mtd_setup(const char *val, struct kernel_param *kp)
 module_param_call(block2mtd, block2mtd_setup, NULL, NULL, 0200);
 MODULE_PARM_DESC(block2mtd, "Device to use. \"block2mtd=<dev>[,<erasesize>]\"");
 
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry *pe;
+
+static void block2mtd_remove_unused_devices(void)
+{
+	struct list_head *pos, *next;
+
+	/* Remove the MTD devices */
+	list_for_each_safe(pos, next, &blkmtd_device_list) {
+		struct block2mtd_dev *dev = list_entry(pos, typeof(*dev), list);
+		if(dev->mtd.usecount>0) {
+			INFO("mtd%d: [%s] NOT removed because it is in use! ", dev->mtd.index,
+				dev->mtd.name + strlen("blkmtd: "));
+		}
+		else {
+			block2mtd_sync(&dev->mtd);
+			del_mtd_device(&dev->mtd);
+			INFO("mtd%d: [%s] removed", dev->mtd.index,
+				dev->mtd.name + strlen("blkmtd: "));
+			list_del(&dev->list);
+			block2mtd_free_device(dev);
+		}
+	}
+}
+
+
+static int block2mtd_write_proc (struct file *file, const char *buffer,
+					unsigned long count, void *data)
+{
+	char buf[256];
+	if(!buffer || count>255)
+		return count;
+	memcpy(buf, buffer, count);
+	buf[count]=0;
+	kill_final_newline(buf);
+	if(!strcmp(buf, "remove_devices")) {
+		block2mtd_remove_unused_devices();
+	}
+	else {
+		block2mtd_setup(buf, NULL);
+	}
+	return count;
+}
+#endif
+
 static int __init block2mtd_init(void)
 {
 	INFO("version " VERSION);
+	INFO("page_readahead %d", CONFIG_MTD_BLOCK2MTD_PAGE_READAHEAD);
+#ifdef CONFIG_PROC_FS
+	if ((pe = create_proc_entry( "mtd_block2mtd", 0, NULL ))) {
+		pe->write_proc = block2mtd_write_proc;
+	}
+#endif
 	return 0;
 }
 
@@ -482,6 +534,11 @@ static void __devexit block2mtd_exit(void)
 		list_del(&dev->list);
 		block2mtd_free_device(dev);
 	}
+
+#ifdef CONFIG_PROC_FS
+	if (pe)
+		remove_proc_entry( "mtd_block2mtd", NULL);
+#endif
 }
 
 

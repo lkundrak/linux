@@ -328,6 +328,9 @@ static int __init init_jffs2_fs(void)
 	       " (SUMMARY) "
 #endif
 	       " (C) 2001-2003 Red Hat, Inc.\n");
+#ifdef CONFIG_JFFS2_ZLIB_LEVEL
+	printk(KERN_INFO "JFFS2 zlib compression level: %d\n", CONFIG_JFFS2_ZLIB_LEVEL);
+#endif
 
 	jffs2_inode_cachep = kmem_cache_create("jffs2_i",
 					     sizeof(struct jffs2_inode_info),

@@ -284,6 +284,9 @@ static unsigned long get_sb_block(void **data)
 }
 
 enum {
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+	Opt_zerofree,
+#endif
 	Opt_bsd_df, Opt_minix_df, Opt_grpid, Opt_nogrpid,
 	Opt_resgid, Opt_resuid, Opt_sb, Opt_err_cont, Opt_err_panic,
 	Opt_err_ro, Opt_nouid32, Opt_nocheck, Opt_debug,
@@ -293,6 +296,9 @@ enum {
 };
 
 static match_table_t tokens = {
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+	{Opt_zerofree, "zerofree"},
+#endif
 	{Opt_bsd_df, "bsddf"},
 	{Opt_minix_df, "minixdf"},
 	{Opt_grpid, "grpid"},
@@ -342,6 +348,11 @@ static int parse_options (char * options,
 
 		token = match_token(p, tokens, args);
 		switch (token) {
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		case Opt_zerofree:
+			set_opt (sbi->s_mount_opt, ZEROFREE);
+			break;
+#endif
 		case Opt_bsd_df:
 			clear_opt (sbi->s_mount_opt, MINIX_DF);
 			break;

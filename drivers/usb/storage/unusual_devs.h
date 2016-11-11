@@ -96,6 +96,15 @@ UNUSUAL_DEV(  0x040d, 0x6205, 0x0003, 0x0003,
 		US_SC_DEVICE, US_PR_DEVICE, NULL,
 		US_FL_IGNORE_RESIDUE ),
 
+/* Submitted by Domenico Rotiroti <drotiro@tiscali.it>
+ * This device needs the SINGLE_LUN flag */
+
+UNUSUAL_DEV( 0x0409, 0x0040, 0x0000, 0x9999,
+  "NEC",
+  "NEC USB UF000x",
+  US_SC_UFI, US_PR_CBI, NULL,
+  US_FL_SINGLE_LUN|US_FL_NEED_OVERRIDE),
+
 /* Deduced by Jonathan Woithe <jwoithe@physics.adelaide.edu.au>
  * Entry needed for flags: US_FL_FIX_INQUIRY because initial inquiry message
  * always fails and confuses drive.

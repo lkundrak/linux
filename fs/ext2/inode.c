@@ -100,7 +100,11 @@ void ext2_discard_prealloc (struct inode * inode)
 		ei->i_prealloc_count = 0;
 		ei->i_prealloc_block = 0;
 		write_unlock(&ei->i_meta_lock);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		ext2_free_blocks (inode, block, total, 0);
+#else
 		ext2_free_blocks (inode, block, total);
+#endif
 		return;
 	} else
 		write_unlock(&ei->i_meta_lock);
@@ -467,7 +471,11 @@ static int ext2_alloc_branch(struct inode *inode,
 	for (i = 1; i < n; i++)
 		bforget(branch[i].bh);
 	for (i = 0; i < n; i++)
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		ext2_free_blocks(inode, le32_to_cpu(branch[i].key), 1, 0);
+#else
 		ext2_free_blocks(inode, le32_to_cpu(branch[i].key), 1);
+#endif
 	return err;
 }
 
@@ -527,7 +535,11 @@ changed:
 	for (i = 1; i < num; i++)
 		bforget(where[i].bh);
 	for (i = 0; i < num; i++)
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		ext2_free_blocks(inode, le32_to_cpu(where[i].key), 1, 1);
+#else
 		ext2_free_blocks(inode, le32_to_cpu(where[i].key), 1);
+#endif
 	return -EAGAIN;
 }
 
@@ -849,7 +861,11 @@ static inline void ext2_free_data(struct inode *inode, __le32 *p, __le32 *q)
 				count++;
 			else {
 				mark_inode_dirty(inode);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+				ext2_free_blocks (inode, block_to_free, count, 1);
+#else
 				ext2_free_blocks (inode, block_to_free, count);
+#endif
 			free_this:
 				block_to_free = nr;
 				count = 1;
@@ -858,7 +874,11 @@ static inline void ext2_free_data(struct inode *inode, __le32 *p, __le32 *q)
 	}
 	if (count > 0) {
 		mark_inode_dirty(inode);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		ext2_free_blocks (inode, block_to_free, count, 1);
+#else
 		ext2_free_blocks (inode, block_to_free, count);
+#endif
 	}
 }
 
@@ -901,7 +921,11 @@ static void ext2_free_branches(struct inode *inode, __le32 *p, __le32 *q, int de
 					   (__le32*)bh->b_data + addr_per_block,
 					   depth);
 			bforget(bh);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+			ext2_free_blocks(inode, nr, 1, 1);
+#else
 			ext2_free_blocks(inode, nr, 1);
+#endif
 			mark_inode_dirty(inode);
 		}
 	} else

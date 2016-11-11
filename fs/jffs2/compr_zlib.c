@@ -81,7 +81,7 @@ static int jffs2_zlib_compress(unsigned char *data_in,
 
 	down(&deflate_sem);
 
-	if (Z_OK != zlib_deflateInit(&def_strm, 3)) {
+	if (Z_OK != zlib_deflateInit(&def_strm, CONFIG_JFFS2_ZLIB_LEVEL)) {
 		printk(KERN_WARNING "deflateInit failed\n");
 		up(&deflate_sem);
 		return -1;

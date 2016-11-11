@@ -676,7 +676,11 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 
 			new_bh = sb_getblk(sb, block);
 			if (!new_bh) {
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+				ext2_free_blocks(inode, block, 1, 0);
+#else
 				ext2_free_blocks(inode, block, 1);
+#endif
 				error = -EIO;
 				goto cleanup;
 			}
@@ -716,24 +720,37 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 	error = 0;
 	if (old_bh && old_bh != new_bh) {
 		struct mb_cache_entry *ce;
-
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		unsigned long block = old_bh->b_blocknr;
+#endif
 		/*
 		 * If there was an old block and we are no longer using it,
 		 * release the old block.
 		 */
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		ce = mb_cache_entry_get(ext2_xattr_cache, old_bh->b_bdev, block); 
+#else
 		ce = mb_cache_entry_get(ext2_xattr_cache, old_bh->b_bdev,
 					old_bh->b_blocknr);
+#endif
 		lock_buffer(old_bh);
 		if (HDR(old_bh)->h_refcount == cpu_to_le32(1)) {
 			/* Free the old block. */
 			if (ce)
 				mb_cache_entry_free(ce);
 			ea_bdebug(old_bh, "freeing");
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+			unlock_buffer(old_bh);
+#else
 			ext2_free_blocks(inode, old_bh->b_blocknr, 1);
+#endif
 			/* We let our caller release old_bh, so we
 			 * need to duplicate the buffer before. */
 			get_bh(old_bh);
 			bforget(old_bh);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+			ext2_free_blocks(inode, block, 1, 1);
+#endif
 		} else {
 			/* Decrement the refcount only. */
 			HDR(old_bh)->h_refcount = cpu_to_le32(
@@ -744,8 +761,13 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 			mark_buffer_dirty(old_bh);
 			ea_bdebug(old_bh, "refcount now=%d",
 				le32_to_cpu(HDR(old_bh)->h_refcount));
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+			unlock_buffer(old_bh);
+#endif
 		}
+#ifndef CONFIG_EXT2_FS_ZEROFREE
 		unlock_buffer(old_bh);
+#endif
 	}
 
 cleanup:
@@ -789,10 +811,18 @@ ext2_xattr_delete_inode(struct inode *inode)
 	if (HDR(bh)->h_refcount == cpu_to_le32(1)) {
 		if (ce)
 			mb_cache_entry_free(ce);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		unlock_buffer(bh);
+#else
 		ext2_free_blocks(inode, EXT2_I(inode)->i_file_acl, 1);
+#endif
 		get_bh(bh);
 		bforget(bh);
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		ext2_free_blocks(inode, EXT2_I(inode)->i_file_acl, 1, 1);
+#else
 		unlock_buffer(bh);
+#endif
 	} else {
 		HDR(bh)->h_refcount = cpu_to_le32(
 			le32_to_cpu(HDR(bh)->h_refcount) - 1);

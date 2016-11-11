@@ -16,6 +16,17 @@ config EXT2_FS
 
 	  If unsure, say Y.
 
+config EXT2_FS_ZEROFREE
+	bool "Ext2 zerofree support"
+	depends on EXT2_FS
+	help
+	  If you enable this flag you can mount an ext2 filesystem with the 
+	  zerofree option (mount -o zerofree) which in turn fills all freed
+	  blooks with zeros.
+	  On the one hand this is a nice privacy feature and on the other
+	  hand this can be used as a primitive hole reporting system to
+	  the underlying block device in order to "free" unused sectors.
+
 config EXT2_FS_XATTR
 	bool "Ext2 extended attributes"
 	depends on EXT2_FS
@@ -1133,6 +1144,13 @@ config JFFS2_ZLIB
 
           Say 'Y' if unsure.
 
+config JFFS2_ZLIB_LEVEL
+	int "JFFS2 ZLIB compression level"
+	depends on JFFS2_ZLIB
+	default "3"
+        help
+          Set the compression level 0-9 for the zlib compressor.
+
 config JFFS2_RTIME
 	bool "JFFS2 RTIME compression support" if JFFS2_COMPRESSION_OPTIONS
 	depends on JFFS2_FS
@@ -1329,6 +1347,16 @@ config UFS_FS_WRITE
 	help
 	  Say Y here if you want to try writing to UFS partitions. This is
 	  experimental, so you should back up your UFS partitions beforehand.
+
+config UNION_FS
+	tristate "Union fs support"
+	depends on EXPERIMENTAL
+	help
+	  Unionfs is a stackable unification file system, which can
+	  appear to merge the contents of several directories (branches),
+	  while keeping their physical content separate.
+
+	  see <http://www.fsl.cs.sunysb.edu/project-unionfs.html> for details
 
 endmenu
 

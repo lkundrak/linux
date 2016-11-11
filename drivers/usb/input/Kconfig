@@ -240,6 +240,16 @@ config USB_EGALAX
 	  To compile this driver as a module, choose M here: the
 	  module will be called touchkitusb.
 
+config USB_EGALAX_VENDOR
+	tristate "eGalax TouchKit USB Touchscreen Driver (Vendor's Version)"
+	depends on USB && INPUT
+	---help---
+	  This is the vendor's version of the eGalax TouchKit USB
+	  Touchscreen controller.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called tkusb.
+
 config USB_YEALINK
 	tristate "Yealink usb-p1k voip phone"
 	depends on USB && INPUT && EXPERIMENTAL

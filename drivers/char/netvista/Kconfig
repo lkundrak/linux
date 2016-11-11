@@ -1,0 +1,8 @@
+config IBM_NETVISTA
+	tristate "IBM NetVista Drivers"
+	depends on EXPERIMENTAL && PCI
+	---help---
+	  This is the reboot/poweroff driver for the IBM NetVista 2200 and 
+	  2800 (if booted in nsboot mode).
+	  If unsure, say N.
+

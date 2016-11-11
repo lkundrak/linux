@@ -94,7 +94,11 @@ extern unsigned long ext2_bg_num_gdb(struct super_block *sb, int group);
 extern int ext2_new_block (struct inode *, unsigned long,
 			   __u32 *, __u32 *, int *);
 extern void ext2_free_blocks (struct inode *, unsigned long,
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+			      unsigned long, int);
+#else
 			      unsigned long);
+#endif
 extern unsigned long ext2_count_free_blocks (struct super_block *);
 extern unsigned long ext2_count_dirs (struct super_block *);
 extern void ext2_check_blocks_bitmap (struct super_block *);

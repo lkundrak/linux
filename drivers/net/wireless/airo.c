@@ -2704,7 +2704,7 @@ static struct net_device *_init_airo_card( unsigned short irq, int port,
 		printk(KERN_ERR "airo:  Couldn't alloc_etherdev\n");
 		return NULL;
         }
-	if (dev_alloc_name(dev, dev->name) < 0) {
+	if (dev_alloc_name(dev, "wlan%d") < 0) {
 		printk(KERN_ERR "airo:  Couldn't get name!\n");
 		goto err_out_free;
 	}

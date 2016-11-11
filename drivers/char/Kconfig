@@ -1021,5 +1021,7 @@ config TELCLOCK
 	  sysfs directory, /sys/devices/platform/telco_clock, with a number of
 	  files for controlling the behavior of this hardware.
 
+source "drivers/char/netvista/Kconfig"
+
 endmenu
 

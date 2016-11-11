@@ -258,6 +258,26 @@ config MMAPPER
           If you'd like to be able to provide a simulated IO port space for
           User-Mode Linux processes, say Y.  If unsure, say N.
 
+config BLK_DEV_NLRD
+	tristate "Neoware Linux Ram Disk Driver"
+	---help---
+	  Say Y here if you want to enable the Neoware Linux Ramdisk.
+	  The special feature of this virtual block device is that it does
+	  release allocated memory for written blocks again if they consist
+	  entirely of the same bytes (default is zero).
+	  The best application for this device is to use it as an in-ram
+	  COW device for the device mapper dm-snapshot target.
+	  In combination with a zerofree enabled ext2 filesystem or a jffs2
+	  filesystem on a block2mtd device temporary writes to the snapshot
+	  won't increase the ram usage.
+
+config BLK_DEV_NLRD_ZEROBYTE
+	int "NLRD Zero Byte (0-255)"
+	depends on BLK_DEV_NLRD
+	default "0"
+	help
+	  Don't change this unless you know what you are doing.
+
 config BLK_DEV_LOOP
 	tristate "Loopback device support"
 	---help---
@@ -314,6 +334,17 @@ config BLK_DEV_CRYPTOLOOP
 	  ext3 or Reiserfs. Please use the Device Mapper crypto module
 	  instead, which can be configured to be on-disk compatible with the
 	  cryptoloop device.
+
+config BLK_DEV_EWFLOOP
+	bool "Neoware Enhanced Write Filter Support"
+	depends on BLK_DEV_LOOP
+	---help---
+	  Say Y here if you want to be able to enable a write cache on any 
+	  loop device. This gives you similar features as the Windows XP 
+	  embedded EWF (Enhanced Write Filter).
+
+	  NOTE: 
+	  You need the Neoware loop_ewf utility to make use of this feature.
 
 config BLK_DEV_NBD
 	tristate "Network block device support"

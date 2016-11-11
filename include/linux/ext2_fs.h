@@ -310,6 +310,9 @@ struct ext2_inode {
 #define EXT2_MOUNT_MINIX_DF		0x000080  /* Mimics the Minix statfs */
 #define EXT2_MOUNT_NOBH			0x000100  /* No buffer_heads */
 #define EXT2_MOUNT_NO_UID32		0x000200  /* Disable 32-bit UIDs */
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+#define EXT2_MOUNT_ZEROFREE		0x000400  /* Zero freed blocks */ 
+#endif
 #define EXT2_MOUNT_XATTR_USER		0x004000  /* Extended user attributes */
 #define EXT2_MOUNT_POSIX_ACL		0x008000  /* POSIX Access Control Lists */
 #define EXT2_MOUNT_XIP			0x010000  /* Execute in place */

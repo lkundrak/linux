@@ -81,6 +81,31 @@ static int max_loop = 8;
 static struct loop_device *loop_dev;
 static struct gendisk **disks;
 
+
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+
+//FIXME: instead of always aquiring the commit lock check where exactly we need to do this
+#define LO_LOCK_SET 	{ down(&lo->lo_commit_mutex); spin_lock_irq(&lo->lo_lock); }
+#define LO_LOCK_CLR	{ spin_unlock_irq(&lo->lo_lock); up(&lo->lo_commit_mutex); }
+
+static int 
+data_all_zero(u8 *data, size_t len)
+{
+	//FIXME: test if a memcmp with a static 512 byte zero array is faster in praxis
+	while(len--) 
+		if(*data++ != 0) 
+			return 0;
+	return 1;
+}
+
+#else  //CONFIG_BLK_DEV_EWFLOOP
+
+#define LO_LOCK_SET 	spin_lock_irq(&lo->lo_lock)
+#define LO_LOCK_CLR	spin_unlock_irq(&lo->lo_lock)
+
+#endif //CONFIG_BLK_DEV_EWFLOOP
+
+
 /*
  * Transfer functions
  */
@@ -360,6 +385,33 @@ static int do_lo_send_write(struct loop_device *lo, struct bio_vec *bvec,
 	return ret;
 }
 
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+static void
+lo_ewf_send(struct loop_device *lo, char *buffer, unsigned long sector, unsigned long nsect)
+{
+	unsigned long s;
+	for(s=0; s<nsect;s++)
+	{
+		u8 *src = buffer+s*512;
+		lo->secs[sector+s].used = 1;
+		if (data_all_zero(src, 512))  {
+			if(lo->secs[sector+s].data!=NULL) {
+					kmem_cache_free(lo->ewf_cache, lo->secs[sector+s].data);
+					lo->secs[sector+s].data=NULL;
+				}
+			}
+		else {
+			if(lo->secs[sector+s].data==NULL) {
+				lo->secs[sector+s].data = kmem_cache_alloc(lo->ewf_cache, GFP_KERNEL);
+				//FIXME: check result
+			}
+			memcpy(lo->secs[sector+s].data, src, 512);
+		}
+	}
+}
+#endif //CONFIG_BLK_DEV_EWFLOOP
+
+
 static int lo_send(struct loop_device *lo, struct bio *bio, int bsize,
 		loff_t pos)
 {
@@ -368,6 +420,22 @@ static int lo_send(struct loop_device *lo, struct bio *bio, int bsize,
 	struct bio_vec *bvec;
 	struct page *page = NULL;
 	int i, ret = 0;
+
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	char blob[4096];
+
+	if(lo->ewf_enabled) 
+	{
+		sector_t sector = bio->bi_sector;
+		bio_for_each_segment(bvec, bio, i) {
+			memcpy(blob, __bio_kmap_atomic(bio, i, KM_USER0), 512*bio_cur_sectors(bio));
+			__bio_kunmap_atomic(bio, KM_USER0);
+			lo_ewf_send(lo, blob, sector, bio_cur_sectors(bio));
+			sector += bio_cur_sectors(bio);
+		}
+		return 0;
+	}
+#endif //CONFIG_BLK_DEV_EWFLOOP
 
 	do_lo_send = do_lo_send_aops;
 	if (!(lo->lo_flags & LO_FLAGS_USE_AOPS)) {
@@ -452,17 +520,55 @@ do_lo_receive(struct loop_device *lo,
 	return (retval < 0)? retval: 0;
 }
 
+
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+static void
+lo_ewf_receive(struct loop_device *lo, char *buffer, unsigned long sector, unsigned long nsect)
+{
+	unsigned long s;
+	for(s=0; s<nsect;s++)
+	{
+		if(lo->secs[sector+s].used) {
+			if(lo->secs[sector+s].data==NULL) {
+				memset(buffer+s*512, 0, 512);
+			}
+			else {
+				memcpy(buffer+s*512, lo->secs[sector+s].data, 512);
+			}
+		}
+	}
+}
+#endif //CONFIG_BLK_DEV_EWFLOOP
+
+
+
 static int
 lo_receive(struct loop_device *lo, struct bio *bio, int bsize, loff_t pos)
 {
 	struct bio_vec *bvec;
 	int i, ret = 0;
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	sector_t sector = bio->bi_sector;
+#endif //CONFIG_BLK_DEV_EWFLOOP
 
 	bio_for_each_segment(bvec, bio, i) {
 		ret = do_lo_receive(lo, bvec, bsize, pos);
 		if (ret < 0)
 			break;
 		pos += bvec->bv_len;
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+		// What we do here is to first get the data from the 
+		// underlying device and then overwrite specific sectors with 
+		// those from the ewf cache
+		// FIXME: Is there a better solution ??
+		if(lo->ewf_enabled) 
+		{
+			char *buffer = __bio_kmap_atomic(bio, i, KM_USER0);
+			lo_ewf_receive(lo, buffer, sector, bio_cur_sectors(bio));
+			sector += bio_cur_sectors(bio);
+			__bio_kunmap_atomic(bio, KM_USER0);
+		}
+#endif //CONFIG_BLK_DEV_EWFLOOP
 	}
 	return ret;
 }
@@ -519,21 +625,21 @@ static int loop_make_request(request_queue_t *q, struct bio *old_bio)
 
 	BUG_ON(!lo || (rw != READ && rw != WRITE));
 
-	spin_lock_irq(&lo->lo_lock);
+	LO_LOCK_SET;
 	if (lo->lo_state != Lo_bound)
 		goto out;
 	if (unlikely(rw == WRITE && (lo->lo_flags & LO_FLAGS_READ_ONLY)))
 		goto out;
 	lo->lo_pending++;
 	loop_add_bio(lo, old_bio);
-	spin_unlock_irq(&lo->lo_lock);
+	LO_LOCK_CLR;
 	complete(&lo->lo_bh_done);
 	return 0;
 
 out:
 	if (lo->lo_pending == 0)
 		complete(&lo->lo_bh_done);
-	spin_unlock_irq(&lo->lo_lock);
+	LO_LOCK_CLR;
 	bio_io_error(old_bio, old_bio->bi_size);
 	return 0;
 }
@@ -603,20 +709,20 @@ static int loop_thread(void *data)
 		if (wait_for_completion_interruptible(&lo->lo_bh_done))
 			continue;
 
-		spin_lock_irq(&lo->lo_lock);
+		LO_LOCK_SET;
 
 		/*
 		 * could be completed because of tear-down, not pending work
 		 */
 		if (unlikely(!lo->lo_pending)) {
-			spin_unlock_irq(&lo->lo_lock);
+			LO_LOCK_CLR;
 			break;
 		}
 
 		bio = loop_get_bio(lo);
 		lo->lo_pending--;
 		pending = lo->lo_pending;
-		spin_unlock_irq(&lo->lo_lock);
+		LO_LOCK_CLR;
 
 		BUG_ON(!bio);
 		loop_handle_bio(lo, bio);
@@ -809,11 +915,15 @@ static int loop_set_fd(struct loop_device *lo, struct file *lo_file,
 		goto out_putf;
 	}
 
+
 	if (!(lo_file->f_mode & FMODE_WRITE))
 		lo_flags |= LO_FLAGS_READ_ONLY;
 
 	set_device_ro(bdev, (lo_flags & LO_FLAGS_READ_ONLY) != 0);
-
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	lo->ewf_enabled = 0;
+	lo->nsectors = size;
+#endif //CONFIG_BLK_DEV_EWFLOOP
 	lo->lo_blocksize = lo_blocksize;
 	lo->lo_device = bdev;
 	lo->lo_flags = lo_flags;
@@ -823,6 +933,7 @@ static int loop_set_fd(struct loop_device *lo, struct file *lo_file,
 	lo->lo_sizelimit = 0;
 	lo->old_gfp_mask = mapping_gfp_mask(mapping);
 	mapping_set_gfp_mask(mapping, lo->old_gfp_mask & ~(__GFP_IO|__GFP_FS));
+
 
 	lo->lo_bio = lo->lo_biotail = NULL;
 
@@ -890,6 +1001,9 @@ loop_init_xfer(struct loop_device *lo, struct loop_func_table *xfer,
 
 static int loop_clr_fd(struct loop_device *lo, struct block_device *bdev)
 {
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	unsigned long s;
+#endif //CONFIG_BLK_DEV_EWFLOOP
 	struct file *filp = lo->lo_backing_file;
 	gfp_t gfp = lo->old_gfp_mask;
 
@@ -902,12 +1016,12 @@ static int loop_clr_fd(struct loop_device *lo, struct block_device *bdev)
 	if (filp == NULL)
 		return -EINVAL;
 
-	spin_lock_irq(&lo->lo_lock);
+	LO_LOCK_SET;
 	lo->lo_state = Lo_rundown;
 	lo->lo_pending--;
 	if (!lo->lo_pending)
 		complete(&lo->lo_bh_done);
-	spin_unlock_irq(&lo->lo_lock);
+	LO_LOCK_CLR;
 
 	wait_for_completion(&lo->lo_done);
 
@@ -931,6 +1045,20 @@ static int loop_clr_fd(struct loop_device *lo, struct block_device *bdev)
 	mapping_set_gfp_mask(filp->f_mapping, gfp);
 	lo->lo_state = Lo_unbound;
 	fput(filp);
+	
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	if(lo->ewf_cache) 
+	{
+		for(s=0; s<lo->nsectors; s++) {
+			if(lo->secs[s].data!=NULL) 
+				kmem_cache_free(lo->ewf_cache, lo->secs[s].data);
+		}
+		kmem_cache_destroy(lo->ewf_cache);
+		vfree(lo->secs);
+	}
+	lo->nsectors = 0;
+#endif //CONFIG_BLK_DEV_EWFLOOP
+	
 	/* This is safe: open() is still holding a reference. */
 	module_put(THIS_MODULE);
 	return 0;
@@ -1138,14 +1266,177 @@ loop_get_status64(struct loop_device *lo, struct loop_info64 __user *arg) {
 	return err;
 }
 
+static int loop_set_rdonly(struct loop_device *lo, struct block_device *bdev) {
+	struct file *filp = lo->lo_backing_file;
+
+	if (lo->lo_state != Lo_bound || filp == NULL)
+		return -ENXIO;
+
+	filp->f_mode &= ~FMODE_WRITE;
+	lo->lo_flags |= LO_FLAGS_READ_ONLY;
+	set_device_ro(bdev, 1);
+
+	return 0;
+}
+
+static int loop_set_rdwr(struct loop_device *lo, struct block_device *bdev) {
+	struct file *filp = lo->lo_backing_file;
+
+	if (lo->lo_state != Lo_bound || filp == NULL)
+		return -ENXIO;
+
+	filp->f_mode |= FMODE_WRITE;
+	lo->lo_flags &= ~LO_FLAGS_READ_ONLY;
+	set_device_ro(bdev, 0);
+
+	return 0;
+}
+
+static int loop_can_set_rdwr(struct loop_device *lo) {
+	struct file *file = lo->lo_backing_file;
+	struct kstat stat;
+	int error;
+	struct block_device *bd;
+	struct super_block *sb=NULL;
+
+	if (lo->lo_state != Lo_bound)
+		return -ENXIO;
+
+	error = vfs_getattr(file->f_vfsmnt, file->f_dentry, &stat);
+	if (error)
+		return error;
+
+	bd = bdget(stat.dev);
+	if (bd) {
+		sb = get_super(bd);
+		bdput(bd);
+	}
+
+	if (!sb)
+		return -ENOENT;
+
+	if (sb->s_flags & MS_RDONLY) {
+		drop_super(sb);
+		return -EPERM;
+	}
+
+	drop_super(sb);
+	return 0;
+}
+
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+static int 
+loop_ewf_enable(struct loop_device *lo) 
+{
+	struct file *filp = lo->lo_backing_file;
+
+	if (lo->lo_state != Lo_bound || filp == NULL)
+		return -ENXIO;
+
+	if (lo->lo_refcnt > 1)	/* one fd is required for the ioctl :) */
+		return -EBUSY;
+
+	if(lo->ewf_enabled)
+		return 0;
+
+	lo->secs = vmalloc(lo->nsectors * sizeof(struct loop_ewf_entry));
+	if(lo->secs==NULL) {
+		printk("loop: vmalloc for secs array failed.\n");
+		return -ENOMEM;
+	}
+	memset(lo->secs, 0, lo->nsectors * sizeof(struct loop_ewf_entry));
+	lo->ewf_cache = kmem_cache_create("loopewf", 512, 0, SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(lo->ewf_cache==NULL) {
+		printk("loop: kmem_cache_create for ewf_cache failed.\n");
+		vfree(lo->secs);
+		lo->secs=NULL;
+		return -ENOMEM;
+	}
+	lo->ewf_enabled=1;
+
+	return 0;
+}
+
+
+static unsigned long 
+loop_ewf_get_usedsecs(struct loop_device *lo)
+{
+	unsigned long s;
+	unsigned long usedsecs = 0;
+	if(!lo->ewf_enabled)
+		return 0;
+	for(s=0; s<lo->nsectors; s++) 
+		if(lo->secs[s].data) 
+			usedsecs++;
+	return usedsecs;
+}
+
+
+static int 
+loop_ewf_commit(struct loop_device *lo)
+{
+	struct file *filp = lo->lo_backing_file;
+	unsigned long s;
+	u8 zdata[512];
+	
+	if (lo->lo_state != Lo_bound || filp == NULL)
+		return -ENXIO;
+
+	if(!lo->ewf_enabled)
+		return 0;
+
+	memset(zdata, 0, 512);
+	
+	down(&lo->lo_commit_mutex); 
+	for(s=0; s<lo->nsectors; s++) 
+	{
+		if(lo->secs[s].used) {
+			u8 *src;
+			src = lo->secs[s].data;
+			if(src==NULL)
+				src = zdata;
+			__do_lo_send_write(lo->lo_backing_file, (u8 __user *)src, 512, s*512);
+			if(lo->secs[s].data) {
+				kmem_cache_free(lo->ewf_cache, lo->secs[s].data);
+				lo->secs[s].data = NULL;
+			}
+			lo->secs[s].used=0;
+		}
+	}
+	up(&lo->lo_commit_mutex); 
+	lo->lo_state = Lo_bound;
+
+	return 0;
+}
+#endif //CONFIG_BLK_DEV_EWFLOOP
+
+
 static int lo_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned long arg)
 {
 	struct loop_device *lo = inode->i_bdev->bd_disk->private_data;
 	int err;
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	unsigned long usedsecs;
+#endif //CONFIG_BLK_DEV_EWFLOOP
 
 	down(&lo->lo_ctl_mutex);
 	switch (cmd) {
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	case LOOP_EWF_GET_USEDSECS:
+		usedsecs = loop_ewf_get_usedsecs(lo);
+		if (copy_to_user((void __user *) arg, &usedsecs, sizeof(usedsecs)))
+			err = -EFAULT;
+		else
+			err=0;
+		break;
+	case LOOP_EWF_COMMIT:
+		err = loop_ewf_commit(lo);
+		break;
+	case LOOP_EWF_ENABLE:
+		err = loop_ewf_enable(lo);
+		break;
+#endif //CONFIG_BLK_DEV_EWFLOOP
 	case LOOP_SET_FD:
 		err = loop_set_fd(lo, file, inode->i_bdev, arg);
 		break;
@@ -1166,6 +1457,15 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 		break;
 	case LOOP_GET_STATUS64:
 		err = loop_get_status64(lo, (struct loop_info64 __user *) arg);
+		break;
+	case LOOP_SET_RDONLY:
+		err = loop_set_rdonly(lo, inode->i_bdev);
+		break;
+	case LOOP_SET_RDWR:
+		err = loop_set_rdwr(lo, inode->i_bdev);
+		break;
+	case LOOP_CAN_SET_RDWR:
+		err = loop_can_set_rdwr(lo);
 		break;
 	default:
 		err = lo->ioctl ? lo->ioctl(lo, cmd, arg) : -EINVAL;
@@ -1286,6 +1586,9 @@ static int __init loop_init(void)
 		if (!lo->lo_queue)
 			goto out_mem4;
 		init_MUTEX(&lo->lo_ctl_mutex);
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+		init_MUTEX(&lo->lo_commit_mutex);
+#endif //CONFIG_BLK_DEV_EWFLOOP
 		init_completion(&lo->lo_done);
 		init_completion(&lo->lo_bh_done);
 		lo->lo_number = i;

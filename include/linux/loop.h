@@ -27,6 +27,13 @@ enum {
 
 struct loop_func_table;
 
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+struct loop_ewf_entry {
+	char	used;
+	u8	*data;
+};
+#endif //CONFIG_BLK_DEV_EWFLOOP
+
 struct loop_device {
 	int		lo_number;
 	int		lo_refcnt;
@@ -64,6 +71,13 @@ struct loop_device {
 	int			lo_pending;
 
 	request_queue_t		*lo_queue;
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+	struct semaphore	lo_commit_mutex;
+	int			ewf_enabled;
+	kmem_cache_t		*ewf_cache;
+	struct loop_ewf_entry	*secs;
+	unsigned long		nsectors;
+#endif //CONFIG_BLK_DEV_EWFLOOP
 };
 
 #endif /* __KERNEL__ */
@@ -157,5 +171,15 @@ int loop_unregister_transfer(int number);
 #define LOOP_SET_STATUS64	0x4C04
 #define LOOP_GET_STATUS64	0x4C05
 #define LOOP_CHANGE_FD		0x4C06
+#define LOOP_SET_RDONLY		0x4C10
+#define LOOP_SET_RDWR		0x4C11
+#define LOOP_CAN_SET_RDWR	0x4C12
+
+#ifdef CONFIG_BLK_DEV_EWFLOOP
+#define LOOP_EWF_GET_USEDSECS	0x4C20
+#define LOOP_EWF_ENABLE		0x4C21
+#define LOOP_EWF_COMMIT		0x4C22
+#endif //CONFIG_BLK_DEV_EWFLOOP
+
 
 #endif

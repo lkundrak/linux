@@ -174,9 +174,34 @@ static void group_release_blocks(struct super_block *sb, int group_no,
 	}
 }
 
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+static void ext2_zero_blocks(struct super_block *sb, unsigned long block,
+		unsigned long count)
+{
+	unsigned long i;
+	struct buffer_head * bh;
+
+	for (i = 0; i < count; i++) {
+		bh = sb_getblk(sb, block+i);
+		if (!bh)
+			continue;
+
+		lock_buffer(bh);
+		memset(bh->b_data, 0, bh->b_size);
+		mark_buffer_dirty(bh);
+		unlock_buffer(bh);
+		brelse(bh);
+	}
+} 
+#endif
+
 /* Free given blocks, update quota and i_blocks field */
 void ext2_free_blocks (struct inode * inode, unsigned long block,
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+		       unsigned long count, int zero)
+#else
 		       unsigned long count)
+#endif
 {
 	struct buffer_head *bitmap_bh = NULL;
 	struct buffer_head * bh2;
@@ -201,6 +226,10 @@ void ext2_free_blocks (struct inode * inode, unsigned long block,
 
 	ext2_debug ("freeing block(s) %lu-%lu\n", block, block + count - 1);
 
+#ifdef CONFIG_EXT2_FS_ZEROFREE
+	if (test_opt(sb, ZEROFREE) && zero)
+		ext2_zero_blocks(sb, block, count); 
+#endif
 do_more:
 	overflow = 0;
 	block_group = (block - le32_to_cpu(es->s_first_data_block)) /

@@ -224,9 +224,12 @@
 #include <asm/hwrpb.h>
 #endif
 
-#include "trident.h"
 
-#define DRIVER_VERSION "0.14.10j-2.6"
+#include "trident.h"
+#define TRUE 1
+#define FALSE 0
+
+#define DRIVER_VERSION "0.14.10j-2.6-neoware-0.1"
 
 #if defined(CONFIG_GAMEPORT) || (defined(MODULE) && defined(CONFIG_GAMEPORT_MODULE))
 #define SUPPORT_JOYSTICK 1
@@ -239,7 +242,7 @@
 #define TRIDENT_DMA_MASK	0x3fffffff	/* DMA buffer mask for pci_alloc_consist */
 #define ALI_DMA_MASK		0x7fffffff	/* ALI Tridents have 31-bit DMA. Wow. */
 
-#define NR_HW_CH		32
+#define NR_HW_CH	64	
 
 /* maximum number of AC97 codecs connected, AC97 2.0 defined 4, but 7018 and 4D-NX only
    have 2 SDATA_IN lines (currently) */
@@ -266,7 +269,8 @@ enum {
 	TRIDENT_4D_NX,
 	SIS_7018,
 	ALI_5451,
-	CYBER5050
+	CYBER5050,
+  SIS_7019
 };
 
 static char *card_names[] = {
@@ -274,7 +278,8 @@ static char *card_names[] = {
 	"Trident 4DWave NX",
 	"SiS 7018 PCI Audio",
 	"ALi Audio Accelerator",
-	"Tvia/IGST CyberPro 5050"
+	"Tvia/IGST CyberPro 5050",
+  "SiS 7019 PCI Audio"
 };
 
 static struct pci_device_id trident_pci_tbl[] = {
@@ -286,6 +291,8 @@ static struct pci_device_id trident_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_ALI, PCI_DEVICE_ID_ALI_5451), 0, 0, ALI_5451},
 	{PCI_DEVICE(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_5050),
 		0, 0, CYBER5050},
+	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_7019, PCI_ANY_ID, PCI_ANY_ID,
+	        0, 0, SIS_7019},
 	{0,}
 };
 
@@ -387,6 +394,24 @@ static struct trident_pcm_bank_address bank_b_addrs = {
 	T4D_AINTEN_B
 };
 
+static struct trident_pcm_bank_address sis7019_bank_a_addrs =
+{
+  0x14,
+  0x1c,
+  0x2c,
+  0
+};
+
+static struct trident_pcm_bank_address sis7019_bank_c_addrs =
+{
+  0x24,
+  0x28,
+  0x34,
+  0
+};
+
+
+
 struct trident_pcm_bank {
 	/* register addresses to control bank operations */
 	struct trident_pcm_bank_address *addresses;
@@ -424,6 +449,9 @@ struct trident_card {
 
 	/* hardware resources */
 	unsigned long iobase;
+
+	void *reg_area_virt;
+
 	u32 irq;
 
 	/* Function support */
@@ -476,6 +504,8 @@ static struct trident_card *devs;
 
 static void trident_ac97_set(struct ac97_codec *codec, u8 reg, u16 val);
 static u16 trident_ac97_get(struct ac97_codec *codec, u8 reg);
+static void sis7019_ac97_set(struct ac97_codec *codec, u8 reg, u16 val);
+static u16 sis7019_ac97_get(struct ac97_codec *codec, u8 reg);
 
 static int trident_open_mixdev(struct inode *inode, struct file *file);
 static int trident_ioctl_mixdev(struct inode *inode, struct file *file, 
@@ -506,12 +536,133 @@ static int ali_allocate_other_states_resources(struct trident_state *state,
 					       int chan_nums);
 static void ali_free_other_states_resources(struct trident_state *state);
 
+
+static u32 DRdChanReg(struct trident_card * card, u32 Offset, u32 ChannelNo);
+static void DWrChanReg(struct trident_card * card, u32 Offset, u32 ChannelNo, u32 dwVal);
+
 /* save registers for ALi Power Management */
 static struct ali_saved_registers {
 	unsigned long global_regs[ALI_GLOBAL_REGS];
 	unsigned long channel_regs[ALI_CHANNELS][ALI_CHANNEL_REGS];
 	unsigned mixer_regs[ALI_MIXER_REGS];
 } ali_registers;
+
+
+/*
+ *  common I/O routines
+ */
+
+static inline u8 sis7019_readb(struct trident_card * card, u32 offset)
+{
+	return readb(card->reg_area_virt + offset);
+}
+
+static inline void sis7019_writeb(struct trident_card * card, u32 offset, u8 val)
+{
+	writeb(val, card->reg_area_virt + offset);
+}
+
+static inline u16 sis7019_readw(struct trident_card * card, u32 offset)
+{
+	return readw(card->reg_area_virt + offset);
+}
+
+static inline void sis7019_writew(struct trident_card * card, u32 offset, u16 val)
+{
+	writew(val, card->reg_area_virt + offset);
+}
+
+static inline u32 sis7019_readl(struct trident_card * card, u32 offset)
+{
+	return readl(card->reg_area_virt + offset);
+}
+
+static inline void sis7019_writel(struct trident_card * card, u32 offset, u32 val)
+{
+	writel(val, card->reg_area_virt + offset);
+}
+
+//For Channel register Read or Write
+//--------------------------------------------------------------------------
+//
+//  DWRdChanReg
+//  Description:
+//      This function read a dword from a channel register.
+//
+//  Parameters:
+//              Offset:
+//
+//              ChannelNo:
+//
+//  Return:
+//
+//              Success : pointer to TSAUDIOHAL
+//
+//              Failure : return NULL
+//
+//       Time   : 1998/12/10
+//  Comment:
+//
+//--------------------------------------------------------------------------
+static u32 DRdChanReg(struct trident_card * card, u32 Offset, u32 ChannelNo)
+{
+        u32 dwValue;
+
+        u32 Address;
+
+        if( Offset >= SIS_WE_GENERAL_PARAMETERS) // test WEPRAM
+                        Address = Offset + (ChannelNo * 0x40);
+        else if( Offset >= SIS_DESTINATION_LINK )  // test Dlink/Dlist
+                        Address = Offset + (ChannelNo * 0x4);
+
+        else if( Offset >= SIS_RXBM_PRAM_A )   // test RXPRAM
+          Address = Offset + (ChannelNo * 0x10);
+        else  if( Offset >= SIS_TXBM_PRAM_A )                         // test TXPRAM
+          Address = Offset + (ChannelNo * 0x10);
+
+        dwValue = sis7019_readl(card, Address);
+        return dwValue;
+}
+
+//--------------------------------------------------------------------------
+//
+//  DWWrChanReg
+//  Description:
+//      This function Write a dword to a Channel register.
+//
+//  Parameters:
+//
+//              Offset:
+//
+//              ChannelNo:
+//
+//              dwVal
+//
+//  Return:
+//
+//              Success : pointer to TSAUDIOHAL
+//
+//              Failure : return NULL
+//
+//       Time   : 1998/12/10
+//  Comment:
+//
+//--------------------------------------------------------------------------
+static void DWrChanReg(struct trident_card * card, u32 Offset, u32 ChannelNo, u32 dwVal)
+{
+        u32 Address;
+
+        if( Offset >= SIS_WE_GENERAL_PARAMETERS) // test WEPRAM
+                        Address = Offset + (ChannelNo * 0x40);
+        else if( Offset >= SIS_DESTINATION_LINK )  // test Dlink/Dlist
+                        Address = Offset + (ChannelNo * 0x4);
+        else if( Offset >= SIS_RXBM_PRAM_A )   // test RXPRAM
+          Address = Offset + (ChannelNo * 0x10);
+        else  if( Offset >= SIS_TXBM_PRAM_A )                         // test TXPRAM
+          Address = Offset + (ChannelNo * 0x10);
+
+	sis7019_writel(card, Address, dwVal);
+}
 
 #define seek_offset(dma_ptr, buffer, cnt, offset, copy_count)	do { \
         (dma_ptr) += (offset);	  \
@@ -550,14 +701,21 @@ trident_enable_loop_interrupts(struct trident_card *card)
 	case PCI_DEVICE_ID_INTERG_5050:
 		global_control |= (ENDLP_IE | MIDLP_IE);
 		break;
+	case PCI_DEVICE_ID_SI_7019:
+		global_control = inl(TRID_REG(card, SiS7019_GLOBAL_INT_EN));
+		global_control |= (SiS7019_AREC_INT_EN | SiS7019_APB_INT_EN);
+		break;
 	default:
 		return 0;
 	}
 
+	pr_debug("trident: Enable Loop Interrupts, globctl = 0x%08X\n", global_control);
+  
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+        outl(global_control, TRID_REG(card, SiS7019_GLOBAL_INT_EN));  
+  else
 	outl(global_control, TRID_REG(card, T4D_LFO_GC_CIR));
 
-	pr_debug("trident: Enable Loop Interrupts, globctl = 0x%08X\n",
-		 inl(TRID_REG(card, T4D_LFO_GC_CIR)));
 
 	return 1;
 }
@@ -567,14 +725,21 @@ trident_disable_loop_interrupts(struct trident_card *card)
 {
 	u32 global_control;
 
+
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    global_control = inl(TRID_REG(card, SiS7019_GLOBAL_INT_EN));
+    global_control &= ~(SiS7019_AREC_INT_EN | SiS7019_APB_INT_EN| SiS7019_AWE_INT_EN);
+    outl(global_control, TRID_REG(card, SiS7019_GLOBAL_INT_EN));
+  }
+  else
+  {
 	global_control = inl(TRID_REG(card, T4D_LFO_GC_CIR));
 	global_control &= ~(ENDLP_IE | MIDLP_IE);
 	outl(global_control, TRID_REG(card, T4D_LFO_GC_CIR));
-
-	pr_debug("trident: Disabled Loop Interrupts, globctl = 0x%08X\n",
-		 global_control);
-
-	return 1;
+  }
+  pr_debug("trident: Disabled Loop Interrupts, globctl = 0x%08X\n", global_control);
+  return (TRUE);
 }
 
 static void
@@ -583,17 +748,35 @@ trident_enable_voice_irq(struct trident_card *card, unsigned int channel)
 	unsigned int mask = 1 << (channel & 0x1f);
 	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
 	u32 reg, addr = bank->addresses->aint_en;
+  u32 dwValue;
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {	
+    dwValue = DRdChanReg(card, SIS_TXBM_PRAM_C, channel); 
+    dwValue |= (SIS_MLP_INT_EN | SIS_ELP_INT_EN  | SIS_LOOP_EN);
+    dwValue &= ~SIS_RELEASE_EN;  
+    if(channel >> 5 )
+      DWrChanReg(card, SIS_TXBM_PRAM_C, channel, dwValue);
+    else 
+      DWrChanReg(card, SIS_RXBM_PRAM_C, (channel >> 5), dwValue);	
+
+#ifdef DEBUG
+    reg = DRdChanReg(card, SIS_TXBM_PRAM_C, channel);
+#endif
+  }
+  else
+  {
 	reg = inl(TRID_REG(card, addr));
 	reg |= mask;
 	outl(reg, TRID_REG(card, addr));
-
 #ifdef DEBUG
 	reg = inl(TRID_REG(card, addr));
-	pr_debug("trident: enabled IRQ on channel %d, %s = 0x%08x(addr:%X)\n",
-		 channel, addr == T4D_AINTEN_B ? "AINTEN_B" : "AINTEN_A",
-		 reg, addr);
 #endif /* DEBUG */
+}
+#ifdef DEBUG
+  printk("trident: enabled IRQ on channel %d, %s = 0x%08x(addr:%X)\n", channel, addr == T4D_AINTEN_B ? "AINTEN_B" : "AINTEN_A", reg, addr);
+#endif
+  return;
 }
 
 static void
@@ -602,20 +785,36 @@ trident_disable_voice_irq(struct trident_card *card, unsigned int channel)
 	unsigned int mask = 1 << (channel & 0x1f);
 	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
 	u32 reg, addr = bank->addresses->aint_en;
+	u32 dwValue;
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    dwValue = DRdChanReg(card, SIS_TXBM_PRAM_C, channel);
+    dwValue &= ~(SIS_MLP_INT_EN | SIS_ELP_INT_EN | SIS_RELEASE_EN | SIS_LOOP_EN);
+    if(channel >> 5 )
+      DWrChanReg(card, SIS_TXBM_PRAM_C, channel, dwValue);
+    else 
+      DWrChanReg(card, SIS_RXBM_PRAM_C, (channel >> 5), dwValue);
+#ifdef DEBUG
+    reg = DRdChanReg(card, SIS_TXBM_PRAM_C, channel);
+#endif
+  }
+	else
+	{
 	reg = inl(TRID_REG(card, addr));
 	reg &= ~mask;
 	outl(reg, TRID_REG(card, addr));
 
 	/* Ack the channel in case the interrupt was set before we disable it. */
 	outl(mask, TRID_REG(card, bank->addresses->aint));
-
 #ifdef DEBUG
 	reg = inl(TRID_REG(card, addr));
-	pr_debug("trident: disabled IRQ on channel %d, %s = 0x%08x(addr:%X)\n",
-		 channel, addr == T4D_AINTEN_B ? "AINTEN_B" : "AINTEN_A",
-		 reg, addr);
 #endif /* DEBUG */
+}
+#ifdef DEBUG
+    printk("trident: disabled IRQ on channel %d, %s = 0x%08x(addr:%X)\n", channel, addr == T4D_AINTEN_B ? "AINTEN_B" : "AINTEN_A", reg, addr);
+#endif /* DEBUG */
+    return;
 }
 
 static void
@@ -625,18 +824,29 @@ trident_start_voice(struct trident_card *card, unsigned int channel)
 	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
 	u32 addr = bank->addresses->start;
 
+
 #ifdef DEBUG
 	u32 reg;
-#endif /* DEBUG */
+#endif
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {   // we assign the bank a for playback ; bank c for capture ; bank b no used 
 	outl(mask, TRID_REG(card, addr));
-
 #ifdef DEBUG
 	reg = inl(TRID_REG(card, addr));
-	pr_debug("trident: start voice on channel %d, %s = 0x%08x(addr:%X)\n",
-		 channel, addr == T4D_START_B ? "START_B" : "START_A",
-		 reg, addr);
+    printk("trident (sis7019): start voice on channel %d, PLAYBACK_START_x = 0x%08x\n",
+        channel, reg);
+#endif
+  }
+  else
+  {
+    outl(mask, TRID_REG(card, addr));
+#ifdef DEBUG
+    reg = inl(TRID_REG(card, addr));
+    printk("trident: start voice on channel %d, %s = 0x%08x(addr:%X)\n", channel, addr == T4D_START_B ? "START_B" : "START_A", reg, addr);
 #endif /* DEBUG */
+}
+  return;
 }
 
 static void
@@ -648,23 +858,45 @@ trident_stop_voice(struct trident_card *card, unsigned int channel)
 
 #ifdef DEBUG
 	u32 reg;
-#endif /* DEBUG */
+#endif	
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
 	outl(mask, TRID_REG(card, addr));
-
 #ifdef DEBUG
 	reg = inl(TRID_REG(card, addr));
-	pr_debug("trident: stop voice on channel %d, %s = 0x%08x(addr:%X)\n",
+    printk("trident: stop voice on channel %d, PLAYBACK_STOP_x = 0x%08x\n",
+        channel, reg);
+#endif /* DEBUG */
+  }
+  else
+  {
+    outl(mask, TRID_REG(card, addr));
+#ifdef DEBUG
+    reg = inl(TRID_REG(card, addr));
+    printk("trident: stop voice on channel %d, %s = 0x%08x(addr:%X)\n",
 		 channel, addr == T4D_STOP_B ? "STOP_B" : "STOP_A",
 		 reg, addr);
 #endif /* DEBUG */
+}
+  return;
 }
 
 static u32
 trident_get_interrupt_mask(struct trident_card *card, unsigned int channel)
 {
-	struct trident_pcm_bank *bank = &card->banks[channel];
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
 	u32 addr = bank->addresses->aint;
+#ifdef DEBUG
+	u32 reg;
+#endif
+
+#ifdef DEBUG
+		reg = inl(TRID_REG(card, addr));
+    if (reg != 0x0)
+		printk("trident: get interrupt mask %d, T4D_INT_B = 0x%08x\n",
+	       channel, reg);
+#endif
 	return inl(TRID_REG(card, addr));
 }
 
@@ -672,15 +904,21 @@ static int
 trident_check_channel_interrupt(struct trident_card *card, unsigned int channel)
 {
 	unsigned int mask = 1 << (channel & 0x1f);
-	u32 reg = trident_get_interrupt_mask(card, channel >> 5);
+  u32 reg = trident_get_interrupt_mask (card, channel);
 
+	if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+	{
+		return (reg & mask) ? TRUE : FALSE;
+	}
+	else
+	{
 #ifdef DEBUG
 	if (reg & mask)
-		pr_debug("trident: channel %d has interrupt, %s = 0x%08x\n",
-			 channel, reg == T4D_AINT_B ? "AINT_B" : "AINT_A",
-			 reg);
-#endif /* DEBUG */
-	return (reg & mask) ? 1 : 0;
+			printk("trident: channel %d has interrupt, AINT_B = 0x%08x\n",
+				   channel, reg);
+#endif
+		return (reg & mask) ? TRUE : FALSE;
+	}
 }
 
 static void
@@ -690,15 +928,27 @@ trident_ack_channel_interrupt(struct trident_card *card, unsigned int channel)
 	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
 	u32 reg, addr = bank->addresses->aint;
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    outl(mask, TRID_REG(card, addr));
+
+#ifdef DEBUG
+    reg = inl(TRID_REG(card, addr));
+#endif /* DEBUG */
+  }
+  else
+  {
 	reg = inl(TRID_REG(card, addr));
 	reg &= mask;
 	outl(reg, TRID_REG(card, addr));
-
 #ifdef DEBUG
 	reg = inl(TRID_REG(card, T4D_AINT_B));
-	pr_debug("trident: Ack channel %d interrupt, AINT_B = 0x%08x\n",
-		 channel, reg);
-#endif /* DEBUG */
+#endif
+  }
+#ifdef DEBUG
+    printk("trident: ack channel %d interrupt, A_INT_X = 0x%08x, mask = 0x%08x\n", channel, reg, mask);
+#endif
+    return;
 }
 
 static struct trident_channel *
@@ -707,8 +957,22 @@ trident_alloc_pcm_channel(struct trident_card *card)
 	struct trident_pcm_bank *bank;
 	int idx;
 
-	bank = &card->banks[BANK_B];
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {	
+    bank = &card->banks[SIS7019_BANK_A];
+    for (idx = 1; idx < 32; idx++) {	
+      if (!(bank->bitmap & (1 << idx))) {
+        struct trident_channel *channel = &bank->channels[idx];
+        bank->bitmap |= 1 << idx;
+        channel->num = idx;
+        return channel;
+      }
+    }
+  }
+  else
+  {	
+    bank = &card->banks[BANK_B];
 	for (idx = 31; idx >= 0; idx--) {
 		if (!(bank->bitmap & (1 << idx))) {
 			struct trident_channel *channel = &bank->channels[idx];
@@ -717,8 +981,30 @@ trident_alloc_pcm_channel(struct trident_card *card)
 			return channel;
 		}
 	}
+  }
 
 	/* no more free channels available */
+	printk(KERN_ERR "trident: no more channels available on Bank B.\n");
+	return NULL;
+}
+
+static struct trident_channel * trident_alloc_rec_pcm_channel(struct trident_card *card)
+{
+	struct trident_pcm_bank *bank;
+	int idx;
+	
+	if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+	{	bank = &card->banks[SIS7019_BANK_C];
+		for (idx = 16; idx < 20; idx++) {	
+			if (!(bank->bitmap & (1 << idx))) {
+				struct trident_channel *channel = &bank->channels[idx];
+				bank->bitmap |= 1 << idx;
+				channel->num = idx + 32; // allen
+				return channel;
+			}
+		}
+	}
+		/* no more free channels avaliable */
 	printk(KERN_ERR "trident: no more channels available on Bank B.\n");
 	return NULL;
 }
@@ -729,6 +1015,20 @@ trident_free_pcm_channel(struct trident_card *card, unsigned int channel)
 	int bank;
 	unsigned char b;
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    if (channel > 63)
+      return;
+
+    bank = channel >> 5;
+    channel = channel & 0x1f;
+
+    card->banks[bank].bitmap &= ~(1 << (channel));
+
+
+  }
+  else
+  {
 	if (channel < 31 || channel > 63)
 		return;
 
@@ -743,6 +1043,8 @@ trident_free_pcm_channel(struct trident_card *card, unsigned int channel)
 	channel = channel & 0x1f;
 
 	card->banks[bank].bitmap &= ~(1 << (channel));
+}
+  return;
 }
 
 static struct trident_channel *
@@ -840,10 +1142,12 @@ static int
 trident_load_channel_registers(struct trident_card *card, u32 * data, 
 			       unsigned int channel)
 {
+// sis7019 don't use the function 
 	int i;
 
+  if (card->pci_id != PCI_DEVICE_ID_SI_7019) 
+  {
 	if (channel > 63)
-		return 0;
 
 	/* select hardware channel to write */
 	outb(channel, TRID_REG(card, T4D_LFO_GC_CIR));
@@ -855,6 +1159,7 @@ trident_load_channel_registers(struct trident_card *card, u32 * data,
 			continue;
 		outl(data[i], TRID_REG(card, CHANNEL_START + 4 * i));
 	}
+  }
 	if (card->pci_id == PCI_DEVICE_ID_ALI_5451 || 
 	    card->pci_id == PCI_DEVICE_ID_INTERG_5050) {
 		outl(ALI_EMOD_Still, TRID_REG(card, ALI_EBUF1));
@@ -869,6 +1174,8 @@ trident_write_voice_regs(struct trident_state *state)
 {
 	unsigned int data[CHANNEL_REGS + 1];
 	struct trident_channel *channel;
+	u32 i=0;
+	u32 dwValue = 0;
 
 	channel = state->dmabuf.channel;
 
@@ -898,10 +1205,72 @@ trident_write_voice_regs(struct trident_state *state)
 			(channel->eso & 0x00ffffff);
 		data[3] = channel->fm_vol & 0xffff;
 		break;
+	case PCI_DEVICE_ID_SI_7019:
+		if( state->open_mode == FMODE_WRITE)  // playback
+		{
+			dwValue = 0;// cso set to 0
+			if( !(channel->control & CHANNEL_STEREO) )
+	                dwValue |= 0x1 << 17;
+			if( !(channel->control & CHANNEL_16BITS) )
+	                dwValue |= 0x1 << 18;
+			if( !(channel->control & CHANNEL_SIGNED) )
+	                dwValue |= 0x1 << 19;
+			// cso
+			DWrChanReg(state->card, SIS_TXBM_PRAM_A, channel->num, dwValue);
+			// lba
+			dwValue = channel->lba;
+			DWrChanReg(state->card, SIS_TXBM_PRAM_B, channel->num, dwValue);
+			// leo		
+			
+			dwValue = (SIS_MLP_INT_EN | SIS_ELP_INT_EN | SIS_LOOP_EN);  
+			dwValue &= ~SIS_RELEASE_EN;
+			dwValue |= channel->eso & 0xffff;
+			DWrChanReg(state->card, SIS_TXBM_PRAM_C, channel->num, dwValue);
+			// eso 
+			dwValue = 0;
+			dwValue |= channel->eso & 0xffff;
+			DWrChanReg(state->card, SIS_TXBM_PRAM_D, channel->num, dwValue);
+			
+			
+			for (i=0;i<16;i++)
+				DWrChanReg(state->card, SIS_WE_GENERAL_PARAMETERS + i*4, channel->num, 0);	
+			// vol 
+			dwValue = 0x80000000;   //wavevol , no attenuatuion
+			DWrChanReg(state->card, SIS_WE_GENERAL_PARAMETERS, channel->num, dwValue);
+			// delta   
+			dwValue = DRdChanReg(state->card,SIS_WE_GENERAL_PARAMETERS_AS, channel->num);
+			dwValue &= 0xc000ffff;
+			dwValue = ((channel->delta & 0xffff) << 16) | dwValue;
+			DWrChanReg(state->card, SIS_WE_GENERAL_PARAMETERS_AS, channel->num, dwValue);
+			//
+			DWrChanReg(state->card, SIS_WE_CHANNEL_CONTROL_LFO, channel->num, 0xD0000000);
+			// link			
+			dwValue = channel->num;
+			DWrChanReg(state->card, SIS_DESTINATION_LINK, channel->num, dwValue);
+            		// list     
+			DWrChanReg(state->card, SIS_DESTINATION_LIST, channel->num, 0xffff0020);
+		}
+		else   //Capture
+		{       //cso & sample type 
+			dwValue = 0;// cso set to 0
+			DWrChanReg(state->card, SIS_RXBM_PRAM_A, (channel->num - 32), dwValue);
+			// lba
+			dwValue = channel->lba;
+			DWrChanReg(state->card, SIS_RXBM_PRAM_B, (channel->num - 32), dwValue);
+			// leo		
+			dwValue = (SIS_MLP_INT_EN | SIS_ELP_INT_EN | SIS_LOOP_EN);  
+            		dwValue |= channel->eso & 0xffff;
+			DWrChanReg(state->card, SIS_RXBM_PRAM_C, (channel->num - 32), dwValue);
+		}	
+		return TRUE;
+		break;
 	default:
 		return 0;
 	}
 
+  if (state->card->pci_id == PCI_DEVICE_ID_SI_7019)
+    return TRUE;
+  else
 	return trident_load_channel_registers(state->card, data, channel->num);
 }
 
@@ -946,6 +1315,7 @@ static unsigned int
 trident_set_dac_rate(struct trident_state *state, unsigned int rate)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
+	u32 dwValue = 0;
 
 	if (rate > 48000)
 		rate = 48000;
@@ -955,6 +1325,15 @@ trident_set_dac_rate(struct trident_state *state, unsigned int rate)
 	dmabuf->rate = rate;
 	dmabuf->channel->delta = compute_rate_play(rate);
 
+
+  if (state->card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    dwValue = DRdChanReg(state->card,SIS_WE_GENERAL_PARAMETERS_AS, dmabuf->channel->num);
+    dwValue &= 0xc000ffff;
+    dwValue = ((dmabuf->channel->delta & 0xffff) << 16) | dwValue;
+    DWrChanReg(state->card, SIS_WE_GENERAL_PARAMETERS_AS, dmabuf->channel->num, dwValue);
+  }
+  else
 	trident_write_voice_regs(state);
 
 	pr_debug("trident: called trident_set_dac_rate : rate = %d\n", rate);
@@ -973,6 +1352,19 @@ trident_set_adc_rate(struct trident_state *state, unsigned int rate)
 	if (rate < 4000)
 		rate = 4000;
 
+	
+	if (state->card->pci_id == PCI_DEVICE_ID_SI_7019)
+	{	// sis 7019 just support 48k recording
+		
+		dmabuf->rate = rate;
+		dmabuf->channel->delta = compute_rate_rec(rate);
+
+		trident_write_voice_regs(state);
+		
+		return rate;
+	}
+  else
+  {
 	dmabuf->rate = rate;
 	dmabuf->channel->delta = compute_rate_rec(rate);
 
@@ -981,6 +1373,7 @@ trident_set_adc_rate(struct trident_state *state, unsigned int rate)
 	pr_debug("trident: called trident_set_adc_rate : rate = %d\n", rate);
 
 	return rate;
+}
 }
 
 /* prepare channel attributes for playback */
@@ -996,17 +1389,37 @@ trident_play_setup(struct trident_state *state)
 	channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
 	channel->eso -= 1;
 
+  if (state->card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    channel->fm_vol = 0x0;
+    channel->control = CHANNEL_LOOP;
+    if (dmabuf->fmt & TRIDENT_FMT_16BIT) {
+      /* 16-bits */
+      channel->control |= CHANNEL_16BITS;
+      /* signed */
+      channel->control |= CHANNEL_SIGNED;
+    }
+    if (dmabuf->fmt & TRIDENT_FMT_STEREO)
+      /* stereo */
+      channel->control |= CHANNEL_STEREO;
+#ifdef DEBUG
+    printk("trident: trident_play_setup, LBA = 0x%08x, "
+        "Delat = 0x%08x, ESO = 0x%08x, Control = 0x%08x\n",
+        channel->lba, channel->delta, channel->eso, channel->control);
+#endif
+    trident_write_voice_regs(state);	
+  }
+  else
+  {
 	if (state->card->pci_id != PCI_DEVICE_ID_SI_7018) {
 		channel->attribute = 0;
 		if (state->card->pci_id == PCI_DEVICE_ID_ALI_5451) {
-			if ((channel->num == ALI_SPDIF_IN_CHANNEL) || 
-			    (channel->num == ALI_PCM_IN_CHANNEL))
+        if ((channel->num == ALI_SPDIF_IN_CHANNEL) || (channel->num == ALI_PCM_IN_CHANNEL))
 				ali_disable_special_channel(state->card, channel->num);
-			else if ((inl(TRID_REG(state->card, ALI_GLOBAL_CONTROL)) 
-				  & ALI_SPDIF_OUT_CH_ENABLE)
-				 && (channel->num == ALI_SPDIF_OUT_CHANNEL)) {
-				ali_set_spdif_out_rate(state->card, 
-						       state->dmabuf.rate);
+        else if ((inl(TRID_REG(state->card, ALI_GLOBAL_CONTROL)) & ALI_SPDIF_OUT_CH_ENABLE) 
+            && (channel->num == ALI_SPDIF_OUT_CHANNEL))
+        {
+          ali_set_spdif_out_rate(state->card, state->dmabuf.rate);
 				state->dmabuf.channel->delta = 0x1000;
 			}
 		}
@@ -1024,12 +1437,14 @@ trident_play_setup(struct trident_state *state)
 	if (dmabuf->fmt & TRIDENT_FMT_STEREO)
 		/* stereo */
 		channel->control |= CHANNEL_STEREO;
-
-	pr_debug("trident: trident_play_setup, LBA = 0x%08x, Delta = 0x%08x, "
-		 "ESO = 0x%08x, Control = 0x%08x\n", channel->lba,
-		 channel->delta, channel->eso, channel->control);
-
+#ifdef DEBUG
+    printk("trident: trident_play_setup, LBA = 0x%08x, "
+        "Delat = 0x%08x, ESO = 0x%08x, Control = 0x%08x\n",
+        channel->lba, channel->delta, channel->eso, channel->control);
+#endif
 	trident_write_voice_regs(state);
+}
+  return;
 }
 
 /* prepare channel attributes for recording */
@@ -1044,6 +1459,30 @@ trident_rec_setup(struct trident_state *state)
 	struct trident_channel *channel = dmabuf->channel;
 	unsigned int rate;
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    pr_debug("trident_rec_setup \n");
+    pr_debug("*** dmabuf->rate=%d \n", dmabuf->rate);	
+    channel->lba = dmabuf->dma_handle;
+    channel->delta = compute_rate_rec(dmabuf->rate);
+    channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
+    channel->eso -= 1;
+    channel->attribute = 0;
+    channel->fm_vol = 0x0;
+    channel->control = CHANNEL_LOOP;
+    if (dmabuf->fmt & TRIDENT_FMT_16BIT) {
+      /* 16-bits */
+      channel->control |= CHANNEL_16BITS;
+      /* signed */
+      channel->control |= CHANNEL_SIGNED;
+    }
+    if (dmabuf->fmt & TRIDENT_FMT_STEREO)
+      /* stereo */
+      channel->control |= CHANNEL_STEREO;
+    trident_write_voice_regs(state);
+  }
+  else 
+  {
 	/* Enable AC-97 ADC (capture) */
 	switch (card->pci_id) {
 	case PCI_DEVICE_ID_ALI_5451:
@@ -1095,6 +1534,17 @@ trident_rec_setup(struct trident_state *state)
 	channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
 	channel->eso -= 1;
 
+		channel->lba = dmabuf->dma_handle;
+		channel->delta = compute_rate_rec(dmabuf->rate);
+		if ((card->pci_id == PCI_DEVICE_ID_ALI_5451) && (channel->num == ALI_SPDIF_IN_CHANNEL)) 
+		{	rate = ali_get_spdif_in_rate(card);
+			if (rate != 48000)
+				channel->delta = ((rate << 12) / dmabuf->rate) & 0x0000ffff;
+		}
+	
+		channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
+		channel->eso -= 1;
+
 	if (state->card->pci_id != PCI_DEVICE_ID_SI_7018) {
 		channel->attribute = 0;
 	}
@@ -1118,6 +1568,7 @@ trident_rec_setup(struct trident_state *state)
 
 	trident_write_voice_regs(state);
 }
+}
 
 /* get current playback/recording dma buffer pointer (byte offset from LBA),
    called with spinlock held! */
@@ -1126,10 +1577,34 @@ trident_get_dma_addr(struct trident_state *state)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
 	u32 cso;
+	int bank;
+	unsigned int channel;
+	channel = dmabuf->channel->num;
 
-	if (!dmabuf->enable)
+	if (!dmabuf->enable){
 		return 0;
+  }
 
+	if (state->card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    bank = channel >> 5;
+    channel = dmabuf->channel->num;	
+    if(!bank)                
+      cso = DRdChanReg(state->card, SIS_TXBM_PRAM_A, channel) & 0xffff;
+    else 
+      cso = DRdChanReg(state->card, SIS_RXBM_PRAM_A, channel-32) & 0xffff;    	
+#ifdef DEBUG
+    printk("trident: trident_get_dma_addr: chip reported channel: %d, " "cso = 0x%04x\n", dmabuf->channel->num, cso);
+    printk("trident: sample_shift %d, ", sample_shift[dmabuf->fmt]); 
+    printk("trident: dmabuf->dmasize %x, ", dmabuf->dmasize);
+#endif
+	    /* ESO and CSO are in units of Samples, convert to byte offset */
+	    cso <<= sample_shift[dmabuf->fmt];
+
+	    return (cso % dmabuf->dmasize);
+
+  }
+  else {
 	outb(dmabuf->channel->num, TRID_REG(state->card, T4D_LFO_GC_CIR));
 
 	switch (state->card->pci_id) {
@@ -1155,6 +1630,7 @@ trident_get_dma_addr(struct trident_state *state)
 	cso <<= sample_shift[dmabuf->fmt];
 
 	return (cso % dmabuf->dmasize);
+}
 }
 
 /* Stop recording (lock held) */
@@ -1220,7 +1696,7 @@ __stop_dac(struct trident_state *state)
 		trident_stop_voice(card, state->other_states[3]->
 				   dmabuf.channel->num);
 	}
-	trident_disable_voice_irq(card, chan_num);
+	//trident_disable_voice_irq(card, chan_num);
 }
 
 static void
@@ -1245,7 +1721,7 @@ start_dac(struct trident_state *state)
 	spin_lock_irqsave(&card->lock, flags);
 	if ((dmabuf->mapped || dmabuf->count > 0) && dmabuf->ready) {
 		dmabuf->enable |= DAC_RUNNING;
-		trident_enable_voice_irq(card, chan_num);
+		//trident_enable_voice_irq(card, chan_num);
 		trident_start_voice(card, chan_num);
 		if (state->chans_num == 6) {
 			trident_start_voice(card, state->other_states[0]->
@@ -1322,8 +1798,10 @@ dealloc_dmabuf(struct dmabuf *dmabuf, struct pci_dev *pci_dev)
 			ClearPageReserved(page);
 		pci_free_consistent(pci_dev, PAGE_SIZE << dmabuf->buforder, 
 				    dmabuf->rawbuf, dmabuf->dma_handle);
-		dmabuf->rawbuf = NULL;
+  //dmabuf->rawbuf = NULL;
 	}
+  //--> shoudn't make any differnences ;)
+  dmabuf->rawbuf = NULL;
 	dmabuf->mapped = dmabuf->ready = 0;
 }
 
@@ -1345,6 +1823,7 @@ prog_dmabuf(struct trident_state *state, enum dmabuf_mode rec)
 	else
 		dma_nums = 1;
 
+  pr_debug("state->chans_num = %d dma_nums=%d\n",state->chans_num, dma_nums);
 	for (i = 0; i < dma_nums; i++) {
 		if (i > 0) {
 			s = state->other_states[i - 1];
@@ -1353,6 +1832,8 @@ prog_dmabuf(struct trident_state *state, enum dmabuf_mode rec)
 			dmabuf->rate = state->dmabuf.rate;
 		}
 
+    pr_debug("(prog_dmabf) i=%d \n", i);
+    pr_debug(" dmabuf->channel->num = %d \n",dmabuf->channel->num);  
 		spin_lock_irqsave(&s->card->lock, flags);
 		dmabuf->hwptr = dmabuf->swptr = dmabuf->total_bytes = 0;
 		dmabuf->count = dmabuf->error = 0;
@@ -1362,6 +1843,7 @@ prog_dmabuf(struct trident_state *state, enum dmabuf_mode rec)
 		if (!dmabuf->rawbuf) {
 			if (i == 0) {
 				if ((ret = alloc_main_dmabuf(state))) {
+          pr_debug("allocate buffer = %x \n", ret);
 					unlock_set_fmt(state);
 					return ret;
 				}
@@ -1422,11 +1904,7 @@ prog_dmabuf(struct trident_state *state, enum dmabuf_mode rec)
 		/* set the ready flag for the dma buffer */
 		dmabuf->ready = 1;
 
-		pr_debug("trident: prog_dmabuf(%d), sample rate = %d, "
-			 "format = %d, numfrag = %d, fragsize = %d "
-			 "dmasize = %d\n", dmabuf->channel->num,
-			 dmabuf->rate, dmabuf->fmt, dmabuf->numfrag,
-			 dmabuf->fragsize, dmabuf->dmasize);
+		pr_debug("trident: prog_dmabuf(%d), sample rate = %d, " "format = %d, numfrag = %d, fragsize = %d " "dmasize = %d\n", dmabuf->channel->num, dmabuf->rate, dmabuf->fmt, dmabuf->numfrag, dmabuf->fragsize, dmabuf->dmasize);
 	}
 	unlock_set_fmt(state);
 	return 0;
@@ -1598,6 +2076,11 @@ trident_update_ptr(struct trident_state *state)
 				   it here, just stop the machine and let the process force hwptr
 				   and swptr to sync */
 				__stop_dac(state);
+				////////Allen//////////
+				dmabuf->swptr = dmabuf->hwptr = 0;
+				dmabuf->count=0;
+				DWrChanReg(state->card, SIS_TXBM_PRAM_A, dmabuf->channel->num, 0);
+	   			/////////////////////
 				dmabuf->error++;
 			} else if (!dmabuf->endcleared) {
 				swptr = dmabuf->swptr;
@@ -1662,24 +2145,61 @@ trident_update_ptr(struct trident_state *state)
 static void
 trident_address_interrupt(struct trident_card *card)
 {
-	int i;
+  int i,j;
 	struct trident_state *state;
-	unsigned int channel;
+
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    for (i = 0; i < 52; i++) 
+    {
+      /* Update the pointers for all channels we are running. */
+      /* FIXME: should read interrupt status only once */
+      if (trident_check_channel_interrupt(card, i)) 
+      {   
+        pr_debug(" (in) Int Occure channel= %d.\n",i);
+        trident_ack_channel_interrupt(card, i);
+
+        state = NULL;
+        for (j = 0; j < 52; j++) 
+        {  
+          if(card->states[j])  
+          {	
+            if(card->states[j]->dmabuf.channel->num == i)
+            {    
+              state = card->states[j]; 	   
+              pr_debug(" (State found ) j = %d.\n",j);
+              break;
+            }			
+          }
+        }
+        if (state != NULL) {
+          pr_debug(" (out) Int Occure channel= %d.\n",i);        
+          trident_update_ptr(state);
+        } else {
+          pr_debug(" (out-2) Int Occure channel= %d.\n",i);
+          trident_stop_voice(card, i);
+          trident_disable_voice_irq(card, i);
+        }
+      }
+    }
+    return;
+  }
 
 	/* Update the pointers for all channels we are running. */
 	/* FIXME: should read interrupt status only once */
 	for (i = 0; i < NR_HW_CH; i++) {
-		channel = 63 - i;
-		if (trident_check_channel_interrupt(card, channel)) {
-			trident_ack_channel_interrupt(card, channel);
+    if (trident_check_channel_interrupt(card, 63 - i)) {
+      //  trident_ack_channel_interrupt(card, 63 - i);
 			if ((state = card->states[i]) != NULL) {
 				trident_update_ptr(state);
+        //printk("Int occure Channel = %d \n", i);		
 			} else {
-				printk(KERN_WARNING "trident: spurious channel " 
-				       "irq %d.\n", channel);
-				trident_stop_voice(card, channel);
-				trident_disable_voice_irq(card, channel);
+        //	printk("trident: spurious channel irq %d.\n",
+        //	       63 - i);
+        trident_stop_voice(card, 63 - i);
+        trident_disable_voice_irq(card, 63 - i);
 			}
+
 		}
 	}
 }
@@ -1827,6 +2347,24 @@ trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	u32 event;
 	u32 gpio;
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    spin_lock(&card->lock);
+    event = inl(TRID_REG(card, SiS7019_GLOBAL_INT_STS));
+
+#ifdef DEBUG
+    printk("trident: trident_interrupt called, MISCINT = 0x%08x\n", event);
+#endif
+
+    if (event & (SiS7019_APB_INT_EN | SiS7019_AREC_INT_EN)) {
+      card->address_interrupt(card);
+    }
+    /* manually clear interrupt status, bad hardware design, blame T^2 */
+    spin_unlock(&card->lock);
+    return IRQ_HANDLED;
+  }
+  else
+  {
 	spin_lock(&card->lock);
 	event = inl(TRID_REG(card, T4D_MISCINT));
 
@@ -1857,6 +2395,7 @@ trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	     TRID_REG(card, T4D_MISCINT));
 	spin_unlock(&card->lock);
 	return IRQ_HANDLED;
+}
 }
 
 /* in this loop, dmabuf.count signifies the amount of data that is waiting */ 
@@ -2002,8 +2541,9 @@ trident_write(struct file *file, const char __user *buffer, size_t count, loff_t
 		ret = -ENXIO;
 		goto out;
 	}
-	if (!dmabuf->ready && (ret = prog_dmabuf_playback(state)))
+	if (!dmabuf->ready && (ret = prog_dmabuf_playback(state))){
 		goto out;
+  }
 
 	if (!access_ok(VERIFY_READ, buffer, count)) {
 		ret = -EFAULT;
@@ -2069,8 +2609,9 @@ trident_write(struct file *file, const char __user *buffer, size_t count, loff_t
 				/* we REALLY have data to play */
 			}
 			if (signal_pending(current)) {
-				if (!ret)
+				if (!ret){
 					ret = -ERESTARTSYS;
+        }
 				goto out_nolock;
 			}
 			down(&state->sem);
@@ -2229,6 +2770,7 @@ trident_mmap(struct file *file, struct vm_area_struct *vma)
 			     virt_to_phys(dmabuf->rawbuf) >> PAGE_SHIFT,
 			     size, vma->vm_page_prot))
 		goto out;
+	
 	dmabuf->mapped = 1;
 	ret = 0;
 out:
@@ -2881,6 +3423,298 @@ trident_release(struct inode *inode, struct file *file)
 	/* we're covered by the open_sem */
 	up(&card->open_sem);
 
+	return 0;
+}
+
+/* Write AC97 codec registers for sis7019*/
+static void sis7019_ac97_set(struct ac97_codec *codec, u8 reg, u16 val)
+{
+	struct trident_card *card = (struct trident_card *)codec->private_data;
+	unsigned int address, mask;
+	
+	unsigned long flags;
+	u32 data;
+
+	unsigned int TimeOutLoop = 0;
+	unsigned int timeOut;
+	int RetryNo = 0; 
+        int semloop;
+        u16 wValue;
+	u16 wordout = 0;
+
+	data = ((u32) val) << 16;
+
+	address = ALI_AC97_WRITE;
+	mask = ALI_AC97_WRITE_ACTION | ALI_AC97_AUDIO_BUSY;
+	if (codec->id)
+		mask |= ALI_AC97_SECONDARY;
+	if (card->revision == ALI_5451_V02)
+		mask |= ALI_AC97_WRITE_MIXER_REGISTER;
+
+    switch( codec->id )
+    {
+    case 0:
+        wordout = SiS7019_PRI_CODEC_WR | ((u16)reg<<8);
+        break;
+    case 1:
+        wordout = SiS7019_SECOND_CODEC_WR | ((u16)reg<<8);
+        break;
+    case 2:
+        wordout = SiS7019_THIRD_CODEC_WR | ((u16)reg<<8);
+        break;
+    }
+
+#ifdef THIRD_CODEC
+wordout = SiS7019_THIRD_CODEC_WR | ((u16)reg<<8);  
+#endif		
+	spin_lock_irqsave(&card->lock, flags);
+
+
+    /* Poll the Data Valid bit until it is valid.   */
+
+    timeOut = 1;
+    
+    do
+    {
+        
+	if (  inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT )
+        {
+		udelay(10);
+	}
+	else 
+	{
+		timeOut=0;
+	}
+	
+        if (timeOut)
+        {
+                udelay(10);
+        }
+
+        RetryNo++;
+    }while( (timeOut==1) && (RetryNo < 3) );
+
+
+    if (timeOut==1)
+    {
+         printk(KERN_ERR "sis7019: No semaphore TimeOut !!\n");
+         spin_unlock_irqrestore(&card->lock, flags);
+	 return;
+    }
+    else
+    {
+        for (semloop=0;semloop<1000;semloop++)
+        {
+
+
+	    wValue = inw(TRID_REG(card, SiS7019_ACLINK_SEMAPHORE));            
+
+            if(wValue & 1) //no right to get
+            {
+               //keep polling
+               udelay(1);
+            }
+            else
+            {
+
+               // add time_out , phillo 12/22
+               
+               while( TimeOutLoop++ < 100 )
+               {
+                   if ( !( inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT ))
+                       break;
+
+                   udelay(1);
+               }
+               if (TimeOutLoop==100)
+               {
+                       printk(KERN_ERR "sis7019: Write Codec TimeOut !!\n");
+               }
+               
+		udelay(10);
+                outw(val, TRID_REG(card, SiS7019_ACLINK_COMMAND+2));
+		outw(wordout, TRID_REG(card, SiS7019_ACLINK_COMMAND));
+
+               TimeOutLoop = 0;
+               while( TimeOutLoop++ < 100 )
+               {
+                   if ( !( inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT ))
+                       break;
+
+                   udelay(1);
+               }
+               if (TimeOutLoop==100)
+               {
+               			printk(KERN_ERR "sis7019: Write Codec TimeOut !!\n");
+	}
+
+
+               // relinquish semaphore
+               outl(0, TRID_REG(card, SiS7019_ACLINK_SEMAPHORE));
+
+               udelay(10);
+		
+		pr_debug(KERN_ERR "sis7019: Read %X !!\n", data);
+		spin_unlock_irqrestore(&card->lock, flags);
+		//return ((u16) (data >> 16));
+		return;
+               
+		}
+        }  // semaphore loop
+ 
+    } // time out
+
+	printk(KERN_ERR "sis7019: AC97 CODEC write timed out.\n");
+	spin_unlock_irqrestore(&card->lock, flags);
+	return;
+	}
+
+/* Read AC97 codec registers for sis7019*/
+static u16 sis7019_ac97_get(struct ac97_codec *codec, u8 reg)
+{
+	struct trident_card *card = (struct trident_card *)codec->private_data;
+	unsigned int address, mask;
+
+
+
+	unsigned long flags;
+	u32 data;
+
+	unsigned int TimeOutLoop = 0;
+	unsigned int timeOut;
+	int RetryNo = 0; 
+        int semloop;
+            u16 wValue;
+	u16 wordout = 0;
+
+	address = ALI_AC97_READ;
+	if (card->revision == ALI_5451_V02) {
+		address = ALI_AC97_WRITE;
+		mask &= ALI_AC97_READ_MIXER_REGISTER;
+		}
+	mask = ALI_AC97_READ_ACTION | ALI_AC97_AUDIO_BUSY;
+	if (codec->id)
+		mask |= ALI_AC97_SECONDARY;
+
+    switch( codec->id )
+    {
+    case 0:
+        wordout = SiS7019_PRI_CODEC_RD | ((u16)reg<<8);
+        break;
+    case 1:
+        wordout = SiS7019_SECOND_CODEC_RD | ((u16)reg<<8);
+        break;
+    case 2:
+        wordout = SiS7019_THIRD_CODEC_RD | ((u16)reg<<8);
+        break;
+	}
+
+#ifdef THIRD_CODEC
+wordout = SiS7019_THIRD_CODEC_WR | ((u16)reg<<8);  
+#endif		
+
+	spin_lock_irqsave(&card->lock, flags);
+
+    
+    /* Poll the Data Valid bit until it is valid.   */
+
+    timeOut = 1;
+    
+    do
+    {
+        
+	if (  inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT )
+        {
+		udelay(1);
+	}
+	else 
+	{
+		timeOut=0;
+}
+
+        if (timeOut)
+{
+                udelay(1);
+        }
+
+        RetryNo++;
+    }while( (timeOut==1) && (RetryNo < 3) );
+
+
+    if (timeOut==1)
+    {
+         printk(KERN_ERR "sis7019: No semaphore TimeOut !!\n");
+         spin_unlock_irqrestore(&card->lock, flags);
+	 return 0;
+	}
+    else
+    {
+
+
+        for (semloop=0;semloop<1000;semloop++)
+        {
+
+
+	    wValue = inw(TRID_REG(card, SiS7019_ACLINK_SEMAPHORE));            
+
+            if(wValue & 1) //no right to get
+            {
+               //keep polling
+               udelay(1);
+			}
+            else
+            {
+
+               // add time_out , phillo 12/22
+               
+               while( TimeOutLoop++ < 100 )
+               {
+                   if ( !( inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT ))
+                       break;
+
+                   udelay(1);
+		}
+               if (TimeOutLoop==100)
+               {
+                       printk(KERN_ERR "sis7019: Write Codec TimeOut !!\n");
+	}
+
+		udelay(10);
+               
+		outl(wordout, TRID_REG(card, SiS7019_ACLINK_COMMAND));
+
+               TimeOutLoop = 0;
+               while( TimeOutLoop++ < 100 )
+               {
+                   if ( !( inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT ))
+                       break;
+                       
+                   udelay(1);
+		}
+               if (TimeOutLoop==100)
+               {
+                       
+			printk(KERN_ERR "sis7019: Write Codec TimeOut !!\n");
+	}
+
+               data = inl(TRID_REG(card, SiS7019_ACLINK_COMMAND));
+
+               // relinquish semaphore
+               outl(0, TRID_REG(card, SiS7019_ACLINK_SEMAPHORE));
+
+               udelay(10);
+		
+		pr_debug(KERN_ERR "sis7019: Read %X !!\n", data);
+		spin_unlock_irqrestore(&card->lock, flags);
+		return ((u16) (data >> 16));
+
+             }
+        }  // semaphore loop
+
+    } // time out
+
+	spin_unlock_irqrestore(&card->lock, flags);
+	printk(KERN_ERR "sis7019: AC97 CODEC read timed out.\n");
 	return 0;
 }
 
@@ -4148,6 +4982,10 @@ trident_ac97_init(struct trident_card *card)
 	unsigned long ready_2nd = 0;
 	struct ac97_codec *codec;
 	int i = 0;
+  u32 dwTmp;
+  u16 wValue;
+  u16 wValue1;
+  u16 count=0;
 
 	/* initialize controller side of AC link, and find out if secondary codes
 	   really exist */
@@ -4205,6 +5043,137 @@ trident_ac97_init(struct trident_card *card)
 		ready_2nd = inl(TRID_REG(card, SI_SERIAL_INTF_CTRL));
 		ready_2nd &= SI_AC97_SECONDARY_READY;
 		break;
+	case PCI_DEVICE_ID_SI_7019:
+
+
+	outl(1, TRID_REG(card, 0));
+	outl(0, TRID_REG(card, 0));	
+        // Set Audio_on bit
+        //
+
+	wValue1 = inw(TRID_REG(card, SiS7019_ACLINK_STATUS));
+        if( !( wValue1 & SiS7019_MODEM_ALIVE) )
+        {
+            // Modem is absent, Issue AC97 Codec COLD reset
+            //
+
+//marked by Albert Lee on June 9 for test Tp12 probelm
+for(count=0;count<1;count++)
+{
+
+        
+  GET_SEM_AGAIN:
+        
+	wValue = inw(TRID_REG(card, SiS7019_ACLINK_SEMAPHORE));
+        if(wValue & 1) //no right to get
+        {
+          	//keep polling
+          	udelay(1);
+		printk(KERN_ERR "No Semaphore right\n");
+
+          	goto GET_SEM_AGAIN;
+        }
+        else
+        {
+          
+		outl(SiS7019_CODEC_COLD_RESET, TRID_REG(card, SiS7019_ACLINK_COMMAND));
+/*
+    startTime = GetTimeInterval( 0 );
+    while ( GetTimeInterval( startTime ) < GTI_MILLISECONDS( 5000 ))
+    {
+        if ( !( WRdReg( ACLINK_STATUS ) & COMMAND_WAIT ))
+        {
+            break;
+        }
+    }
+*/
+		udelay(500);
+		while (  inw(TRID_REG(card, SiS7019_ACLINK_STATUS)) & SiS7019_COMMAND_WAIT )
+        	{
+	            udelay(1);
+	        }
+		        
+		pr_debug(KERN_ERR "After codec reset\n");
+
+          
+		wValue = inw(TRID_REG(card, SiS7019_ACLINK_STATUS));
+	        if( wValue & SiS7019_PRI_CODEC_RDY )
+	        {
+			printk(KERN_ERR "found PRI_CODEC_RDY\n");
+	        }
+#ifdef THIRT_CODEC
+	        if( wValue & 0x400  )
+	        {            
+			printk(KERN_ERR "found 3rd_CODEC_RDY\n");
+	        }
+#endif
+
+	        // relinquish semaphore
+		outl(0, TRID_REG(card, SiS7019_ACLINK_SEMAPHORE));
+        }
+
+/*
+            WORD     wCodecReg=0;
+
+            startTime = GetTimeInterval(0);
+            while(1)
+            {
+                if( GetTimeInterval( startTime ) > GTI_MILLISECONDS( 5000 ) )
+                {
+                        Debug3(1000);
+                        _DbgPrintF( 1030,(" WarmUp failure ..."));
+                        break;
+                }
+
+                WriteCodecRegister(AC97REG_MASTER_VOLUME, 0x0202, -1 );
+                NTSTATUS ntStatus=HwReadCODEC (0x02, &wCodecReg);
+                if (NT_SUCCESS(ntStatus))
+                {
+                        if( wCodecReg == 0x0202 )
+                        {
+                                count = 3;
+                                break;
+                        }
+                }
+           }
+           _DbgPrintF( 1030,("Count=%ld",count));
+*/
+}
+        } //end if modem alive
+        
+	        // set audio on
+        	dwTmp = inl(TRID_REG(card, SiS7019_ACLINK_AUDIO_CFG));
+		outl(dwTmp | SiS7019_AUDIO_ALIVE_SET, TRID_REG(card, SiS7019_ACLINK_AUDIO_CFG)); 
+        
+
+	        // enable playback/record slot
+		dwTmp = inl(TRID_REG(card, SiS7019_ACLINK_AUDIO_CFG));
+		outl(dwTmp | SiS7019_PB_MAIN_EN | SiS7019_REC_PCM_EN, TRID_REG(card, SiS7019_ACLINK_AUDIO_CFG));
+        
+
+/*
+#ifdef THIRT_CODEC
+        dwTmp = DRdReg ( 7019_ACLINK_AUDIO_CFG );
+        DWrReg( 7019_ACLINK_AUDIO_CFG , dwTmp | 0x100);
+        WriteCodecRegister((AC97Register)0x74, 0x1, -1 );
+#endif
+*/
+
+		outl(0x00, TRID_REG(card, SiS7019_ACLINK_PLAY_SOURCE));
+		outl(0x1d, TRID_REG(card, 0x10));        
+        
+
+		/* disable AC97 GPIO interrupt */
+//		outl(0x00, TRID_REG(card, SI_AC97_GPIO));
+		/* when power up the AC link is in cold reset mode so stop it */
+//		outl(PCMOUT|SURROUT|CENTEROUT|LFEOUT|SECONDARY_ID,
+//		     TRID_REG(card, SI_SERIAL_INTF_CTRL));
+		/* it take a long time to recover from a cold reset (especially when you have
+		   more than one codec) */
+//		udelay(2000);
+//		ready_2nd = inl(TRID_REG(card, SI_SERIAL_INTF_CTRL));
+//		ready_2nd &= SI_AC97_SECONDARY_READY;
+		break;
 	}
 
 	for (num_ac97 = 0; num_ac97 < NR_AC97; num_ac97++) {
@@ -4219,6 +5188,10 @@ trident_ac97_init(struct trident_card *card)
 		if (card->pci_id == PCI_DEVICE_ID_ALI_5451) {
 			codec->codec_read = ali_ac97_read;
 			codec->codec_write = ali_ac97_write;
+		}
+		else if (card->pci_id == PCI_DEVICE_ID_SI_7019) {
+			codec->codec_read = sis7019_ac97_get;
+			codec->codec_write = sis7019_ac97_set;
 		} else {
 			codec->codec_read = trident_ac97_get;
 			codec->codec_write = trident_ac97_set;
@@ -4392,6 +5365,9 @@ trident_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 	}
 	memset(card, 0, sizeof (*card));
 
+  card->reg_area_virt = ioremap(pci_resource_start(pci_dev, 1), 0x4000);
+  printk("SiS7019: 0x%lx IRQ %d\n", pci_resource_start(pci_dev, 1), pci_dev->irq);
+
 	init_timer(&card->timer);
 	card->iobase = iobase;
 	card->pci_dev = pci_dev;
@@ -4400,9 +5376,18 @@ trident_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 	card->irq = pci_dev->irq;
 	card->next = devs;
 	card->magic = TRIDENT_CARD_MAGIC;
+
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)	
+  {    
+    card->banks[BANK_A].addresses = &sis7019_bank_a_addrs;
+    card->banks[BANK_B].addresses = &sis7019_bank_c_addrs;
+  } 
+  else 
+  {
 	card->banks[BANK_A].addresses = &bank_a_addrs;
-	card->banks[BANK_A].bitmap = 0UL;
 	card->banks[BANK_B].addresses = &bank_b_addrs;
+  }
+    card->banks[BANK_A].bitmap = 0UL;
 	card->banks[BANK_B].bitmap = 0UL;
 
 	init_MUTEX(&card->open_sem);
@@ -4464,9 +5449,13 @@ trident_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 		cyber_init_ritual(card);
 	} else {
 		card->alloc_pcm_channel = trident_alloc_pcm_channel;
-		card->alloc_rec_pcm_channel = trident_alloc_pcm_channel;
 		card->free_pcm_channel = trident_free_pcm_channel;
 		card->address_interrupt = trident_address_interrupt;
+    
+    if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+      card->alloc_rec_pcm_channel = trident_alloc_rec_pcm_channel;
+    else
+      card->alloc_rec_pcm_channel = trident_alloc_pcm_channel;
 	}
 
 	/* claim our irq */
@@ -4534,6 +5523,16 @@ trident_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 	rc = 0;
 	pci_set_drvdata(pci_dev, card);
 
+  if (card->pci_id == PCI_DEVICE_ID_SI_7019)
+  {
+    // enable ACLink pcm 
+    outl(0x800f3010, TRID_REG(card, 0x5c));
+    outl(0x3210, TRID_REG(card, 0x40));    
+    // write the default volume 
+    outl(0x00,TRID_REG(card, 0xa4));
+  } 
+
+
 	/* Enable Address Engine Interrupts */
 	trident_enable_loop_interrupts(card);
 
@@ -4589,6 +5588,9 @@ trident_remove(struct pci_dev *pci_dev)
 	/* free hardware resources */
 	free_irq(card->irq, card);
 	release_region(card->iobase, 256);
+
+	//7019
+	iounmap(card->reg_area_virt);
 
 	/* unregister audio devices */
 	for (i = 0; i < NR_AC97; i++)

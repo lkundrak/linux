@@ -70,6 +70,114 @@
 #define DAC_RUNNING	0x01
 #define ADC_RUNNING	0x02
 
+
+
+#define PCI_VENDOR_ID_SI			0x1039
+#ifndef PCI_DEVICE_ID_SI_7019
+#define PCI_DEVICE_ID_SI_7019		0x7019
+#endif
+
+//7019
+#define SiS7019_GLOBAL_CONTROL  0x0
+#define SiS7019_SOFTWARE_RST    0x1
+
+#define SiS7019_GLOBAL_INT_EN   0x04
+#define SiS7019_ATIMER_INT_EN   0x8
+#define SiS7019_AREC_INT_EN   0x4
+#define SiS7019_APB_INT_EN   0x2
+#define SiS7019_AWE_INT_EN   0x1
+
+#define SiS7019_GLOBAL_INT_STS  0x08
+#define SiS7019_ATIMER_INT      0x8
+
+#define SiS7019_GLOBAL_TIMER    0x0C
+#define SiS7019_ATIMER_EN       0x8000
+
+#define SiS7019_PLAYBACK_START_A 0x14
+#define SiS7019_PLAYBACK_START_B 0x18
+#define SiS7019_PLAYBACK_STOP_A  0x1C
+#define SiS7019_PLAYBACK_STOP_B  0x20
+#define SiS7019_RECORD_START     0x24
+#define SiS7019_RECORD_STOP      0x28
+#define SiS7019_PLAYBACK_INT_A   0x2C
+#define SiS7019_PLAYBACK_INT_B   0x30
+#define SiS7019_RECORD_INT       0x34
+
+#define SiS7019_ACLINK_PLAY_SOURCE  0x40
+#define SiS7019_ACLINK_COMMAND  0x50
+#define SiS7019_ACLINK_SEMAPHORE   0x54
+#define SiS7019_ACLINK_STATUS    0x58
+#define SiS7019_AUDIO_ALIVE      0x1000
+#define SiS7019_MODEM_ALIVE      0x2000
+#define SiS7019_PRI_CODEC_RDY    0x100
+#define SiS7019_CODEC_COLD_RESET  0x4
+#define SiS7019_CODEC_WARM_RESET  0x5
+#define SiS7019_PRI_CODEC_WR      0x8
+#define SiS7019_PRI_CODEC_RD      0x9
+#define SiS7019_SECOND_CODEC_WR   0xa
+#define SiS7019_SECOND_CODEC_RD   0xb
+#define SiS7019_THIRD_CODEC_WR    0xc
+#define SiS7019_THIRD_CODEC_RD    0xd
+
+#define SiS7019_COMMAND_WAIT     0x1
+#define SiS7019_AUDIO_ALIVE_SET  0x80000000
+#define SiS7019_PB_MAIN_EN       0x10000
+#define SiS7019_REC_MIC_EN       0x2000
+#define SiS7019_REC_PCM_EN       0x1000
+#define SiS7019_ACLINK_AUDIO_CFG 0x5C
+#define SiS7019_MODEM_ALIVE_SET  0x80000000
+#define SiS7019_ACLINK_MODEM_CFG 0x60
+#define SiS7019_SPDIF_OUT_ENABLE 0x1
+#define SiS7019_SPDIF_CONFIG     0x74
+
+#define SiS7019_PB_INT_STS_A     0x2C
+#define SiS7019_PB_INT_STS_B     0x30
+#define SiS7019_REC_INT_STS      0x34
+#define SiS7019_PAUSE_ENGINE     0x1
+#define SiS7019_WE_CONTROL       0xA0
+#define SiS7019_ENV_INT_STS_A    0xA8
+#define SiS7019_ENV_INT_STS_B    0xAC
+
+// channel register
+#define SIS_TXBM_PRAM_A                  0x00
+#define SIS_TXBM_PRAM_B                  0x04
+#define SIS_TXBM_PRAM_C                  0x08
+#define SIS_TXBM_PRAM_D                  0x0c      //most complicate
+
+//new spec
+#define TXPRAM_OFFSET     0x0
+#define RXPRAM_OFFSET     0x800
+#define WEPRAM_OFFSET     0x2000
+#define DLINK_OFFSET      0x1000
+#define DLIST_OFFSET      0x1400
+
+#define SIS_RXBM_PRAM_A                  0x800
+#define SIS_RXBM_PRAM_B                  0x804
+#define SIS_RXBM_PRAM_C                  0x808
+#define SIS_WE_GENERAL_PARAMETERS        0x2000
+#define SIS_WE_GENERAL_PARAMETERS_AS     0x2004
+#define SIS_WE_ARTICULATION_SCALES       0x2008
+#define SIS_WE_TIMER_SET                 0x200C
+#define SIS_WE_GENERATOR_VALUE           0x2010
+#define SIS_WE_CHANNEL_CONTROL_LFO       0x2014
+#define SIS_WE_LFO_EG_A                  0x2018
+#define SIS_WE_LFO_EG_B                  0x201C
+#define SIS_WE_LFO_EG_C                  0x2020
+#define SIS_WE_LFO_EG_D                  0x2024
+#define SIS_DESTINATION_LINK             0x1000
+#define SIS_DESTINATION_LIST             0x1400
+
+#define SIS_ESO_INT_EN		         0x40000
+#define SIS_MLP_INT_EN		         0x10000
+#define SIS_ELP_INT_EN                   0x20000
+#define SIS_RELEASE_EN			 0x2000000
+#define SIS_LOOP_EN                      0x1000000 
+
+#define SIS7019_BANK_A			0
+#define SIS7019_BANK_C			1
+//7019 end
+
+
 /* Register Addresses */
 
 /* operational registers common to DX, NX, 7018 */

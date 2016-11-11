@@ -150,6 +150,14 @@ config MTD_BLOCK2MTD
 	  the long term, it should replace MTD_BLKMTD.  Right now, you
 	  shouldn't entrust important data to it yet.
 
+config MTD_BLOCK2MTD_PAGE_READAHEAD
+	int "How many pages block2mtd reads ahead"
+	depends on MTD_BLOCK2MTD
+	default "64"
+	help
+	  This allows you to configure the PAGE_READAHEAD value of the 
+	  MTD_BLOCK2MTD driver.
+
 comment "Disk-On-Chip Device Drivers"
 
 config MTD_DOC2000

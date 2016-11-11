@@ -50,7 +50,7 @@ static int atkbd_softrepeat;
 module_param_named(softrepeat, atkbd_softrepeat, bool, 0);
 MODULE_PARM_DESC(softrepeat, "Use software keyboard repeat");
 
-static int atkbd_softraw = 1;
+static int atkbd_softraw = 0;
 module_param_named(softraw, atkbd_softraw, bool, 0);
 MODULE_PARM_DESC(softraw, "Use software generated rawmode");
 

@@ -512,6 +512,7 @@ static int netdev_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static struct ethtool_ops netdev_ethtool_ops;
 static int  rhine_close(struct net_device *dev);
 static void rhine_shutdown (struct pci_dev *pdev);
+static void rhine_configure_wol(struct net_device *dev);
 
 #define RHINE_WAIT_FOR(condition) do {					\
 	int i=1024;							\
@@ -1840,8 +1841,40 @@ static int rhine_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 	rp->wolopts = wol->wolopts;
 	spin_unlock_irq(&rp->lock);
 
+	rhine_configure_wol(dev);
+
 	return 0;
 }
+
+static void rhine_configure_wol(struct net_device *dev) {
+	struct rhine_private *rp = netdev_priv(dev);
+	void __iomem *ioaddr = rp->base;
+
+	if (rp->wolopts & WAKE_MAGIC) {
+		iowrite8(WOLmagic, ioaddr + WOLcrSet);
+		/*
+		 * Turn EEPROM-controlled wake-up back on -- some hardware may
+		 * not cooperate otherwise.
+		 */
+		iowrite8(ioread8(ioaddr + ConfigA) | 0x03, ioaddr + ConfigA);
+	}
+
+	if (rp->wolopts & (WAKE_BCAST|WAKE_MCAST))
+		iowrite8(WOLbmcast, ioaddr + WOLcgSet);
+
+	if (rp->wolopts & WAKE_PHY)
+		iowrite8(WOLlnkon | WOLlnkoff, ioaddr + WOLcrSet);
+
+	if (rp->wolopts & WAKE_UCAST)
+		iowrite8(WOLucast, ioaddr + WOLcrSet);
+
+	if (rp->wolopts) {
+		/* Enable legacy WOL (for old motherboards) */
+		iowrite8(0x01, ioaddr + PwcfgSet);
+		iowrite8(ioread8(ioaddr + StickyHW) | 0x04, ioaddr + StickyHW);
+	}
+}
+
 
 static struct ethtool_ops netdev_ethtool_ops = {
 	.get_drvinfo		= netdev_get_drvinfo,
@@ -1940,35 +1973,19 @@ static void rhine_shutdown (struct pci_dev *pdev)
 	if (rp->quirks & rq6patterns)
 		iowrite8(0x04, ioaddr + 0xA7);
 
-	if (rp->wolopts & WAKE_MAGIC) {
-		iowrite8(WOLmagic, ioaddr + WOLcrSet);
-		/*
-		 * Turn EEPROM-controlled wake-up back on -- some hardware may
-		 * not cooperate otherwise.
-		 */
-		iowrite8(ioread8(ioaddr + ConfigA) | 0x03, ioaddr + ConfigA);
-	}
+	rhine_configure_wol(dev);
 
-	if (rp->wolopts & (WAKE_BCAST|WAKE_MCAST))
-		iowrite8(WOLbmcast, ioaddr + WOLcgSet);
 
-	if (rp->wolopts & WAKE_PHY)
-		iowrite8(WOLlnkon | WOLlnkoff, ioaddr + WOLcrSet);
+	/* We commented this line out because it causes troubles on the 
+	 * e370. It appears that the UUID in the SMBIOS is generated
+	 * dynamically on bootup using the network cards mac address.
+	 * If it is put into the D3 state, the BIOS isn't able to get the
+	 * mac address and we and up with a different UUID */
 
-	if (rp->wolopts & WAKE_UCAST)
-		iowrite8(WOLucast, ioaddr + WOLcrSet);
-
-	if (rp->wolopts) {
-		/* Enable legacy WOL (for old motherboards) */
-		iowrite8(0x01, ioaddr + PwcfgSet);
-		iowrite8(ioread8(ioaddr + StickyHW) | 0x04, ioaddr + StickyHW);
-	}
-
-	/* Hit power state D3 (sleep) */
-	iowrite8(ioread8(ioaddr + StickyHW) | 0x03, ioaddr + StickyHW);
+	/* Hit power state D3 (sleep) *
+	 * iowrite8(ioread8(ioaddr + StickyHW) | 0x03, ioaddr + StickyHW); */
 
 	/* TODO: Check use of pci_enable_wake() */
-
 }
 
 #ifdef CONFIG_PM
