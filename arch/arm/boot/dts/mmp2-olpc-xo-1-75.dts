@@ -1,0 +1,165 @@
+/dts-v1/;
+#include "mmp2.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "OLPC XO-1.75";
+	compatible = "olpc,xo-1.75", "mrvl,mmp2";
+
+	chosen {
+		/* bootargs = "console=ttyS2,115200 earlyprintk root=upadol rdinit=/bin/sh"; */
+		/* bootargs = "console=ttyS2,115200 earlyprintk root=/dev/ram0"; */
+		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module pxa168fb +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30";
+	};
+
+	memory {
+		reg = <0x0 0x20000000>;
+		available = <0x1000 0x1efff000>;
+	};
+
+	dcon_i2c {
+		compatible = "i2c-gpio";
+		gpios = <&gpio 110 GPIO_ACTIVE_HIGH &gpio 161 GPIO_ACTIVE_HIGH>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+
+		dcon@0d {
+			.node = <0x382e0f00>;
+			compatible = "olpc,xo1.75-dcon", "olpc,xo1-dcon";
+			gpios = <&gpio 100 GPIO_ACTIVE_HIGH
+				 &gpio 101 GPIO_ACTIVE_HIGH
+				 &gpio 142 GPIO_ACTIVE_HIGH
+				 &gpio 124 GPIO_ACTIVE_HIGH>;
+			gpio-names = "stat0", "stat1", "load", "irq";
+			reg = <0x0d>;
+			status = "okay";
+		};
+	};
+
+	panel {
+		compatible = "pixelqi,unknown", "simple-panel";
+		width-mm = <152>;
+		height-mm = <115>;
+
+		panel-timing {
+			/* 1200x900 @50Hz */
+			hactive = <1200>;
+			vactive = <900>;
+			clock-frequency = <56930000>;
+			hback-porch = <24>;
+			hfront-porch = <26>;
+			vback-porch = <5>;
+			vfront-porch = <4>;
+			hsync-len = <6>;
+			vsync-len = <3>;
+		};
+	};
+
+	soc {
+		ap-sp@d4290000 {
+			#address-cells = <0x1>;
+			#size-cells = <0x0>;
+			/* clocks = <&soc_clocks MMP2_CLK_WTM>; */
+			compatible = "olpc,ap-sp";
+			interrupts = <40>;
+			reg = <0xd4290000 0x8f>;
+			status = "okay";
+
+			keyboard@0 {
+				compatible = "pnpPNP,303";
+				keyboard-type = "us";
+				language = "EN";
+				reg = <0>;
+			};
+
+			touchpad@1 {
+				.node = <0xec760c00>;
+				compatible = "pnpPNP,f03";
+				reg = <1>;
+			};
+		};
+
+		apb@d4000000 {
+			spi0: ssp3@d4037000 {
+				compatible = "marvell,mmp2-ssp3";
+				reg = <0xd4037000 0x1000>;
+				interrupts = <20>;
+				clocks = <&soc_clocks MMP2_CLK_SSP3>;
+				spi-slave;
+
+				slave {
+					compatible = "olpc,xo1.75-ec";
+					ack-gpio = <&gpio 125 GPIO_ACTIVE_HIGH>;
+					cmd-gpio = <&gpio 155 GPIO_ACTIVE_HIGH>;
+				};
+			};
+		};
+	};
+};
+
+&uart3 {
+	status = "okay";
+};
+
+&rtc {
+	status = "okay";
+};
+
+&mmc1 {
+	bus-width = <8>;
+	no-1-8-v;
+	mrvl,clk-delay-cycles = <31>;
+	status = "okay";
+};
+
+&mmc2 {
+	bus-width = <8>;
+	non-removable;
+	broken-cd;
+	/*xxx power-delay-ms = <0x32 0x1f4>; */
+	power-gpios = <&gpio 34 GPIO_ACTIVE_HIGH>; /* ceck */
+	reset-gpios = <&gpio 58 GPIO_ACTIVE_LOW>; /* ceck */
+	mrvl,clk-delay-cycles = <31>;
+	status = "okay";
+};
+
+&mmc3 {
+	bus-width = <8>;
+	non-removable;
+	broken-cd;
+	mrvl,clk-delay-cycles = <15>;
+	status = "okay";
+};
+
+&twsi1 {
+	status = "okay";
+	codec: alc5631@1a {
+		compatible = "realtek,alc5631";
+		reg = <0x1a>;
+		status = "okay";
+	};
+};
+
+&twsi2 {
+	status = "okay";
+};
+
+#if 0
+&twsi6 {
+	status = "okay";
+        accelerometer: lis3lv02d@1d {
+                compatible = "st,lis331dlh", "st,lis3lv02d";
+                reg = <0x1d>;
+		status = "okay";
+        };
+};
+#endif
+
+&lcdc {
+	status = "okay";
+};
+
+&ehci0 {
+	status = "okay";
+};
