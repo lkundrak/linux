@@ -444,5 +444,14 @@
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 		};
+
+		lcdc: lcdc@40500000 {
+			compatible = "marvell,pxa688-lcdc";
+			reg = <0xd420b000 0x400>;
+			interrupts = <41>;
+			clocks = <&soc_clocks MMP2_CLK_DISP0>;
+			clock-names = "LCDCLK";
+			status = "disabled";
+		};
 	};
 };
