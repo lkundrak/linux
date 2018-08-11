@@ -17,6 +17,7 @@
 		available = <0x1000 0x1efff000>;
 	};
 
+#if 0
 	dcon_i2c {
 		compatible = "i2c-gpio";
 		gpios = <&gpio 110 GPIO_ACTIVE_HIGH &gpio 161 GPIO_ACTIVE_HIGH>;
@@ -55,8 +56,10 @@
 			vsync-len = <3>;
 		};
 	};
+#endif
 
 	soc {
+#if 0
 		ap-sp@d4290000 {
 			#address-cells = <0x1>;
 			#size-cells = <0x0>;
@@ -79,6 +82,7 @@
 				reg = <1>;
 			};
 		};
+#endif
 
 		apb@d4000000 {
 			spi0: ssp3@d4037000 {
@@ -102,6 +106,7 @@
 	status = "okay";
 };
 
+#if 0
 &rtc {
 	status = "okay";
 };
@@ -112,6 +117,7 @@
 	mrvl,clk-delay-cycles = <31>;
 	status = "okay";
 };
+#endif
 
 &mmc2 {
 	bus-width = <8>;
@@ -122,8 +128,12 @@
 	reset-gpios = <&gpio 58 GPIO_ACTIVE_LOW>; /* ceck */
 	mrvl,clk-delay-cycles = <31>;
 	status = "okay";
+
+	wakeup-source;
+	keep-power-in-suspend;
 };
 
+#if 0
 &mmc3 {
 	bus-width = <8>;
 	non-removable;
@@ -145,7 +155,6 @@
 	status = "okay";
 };
 
-#if 0
 &twsi6 {
 	status = "okay";
         accelerometer: lis3lv02d@1d {
