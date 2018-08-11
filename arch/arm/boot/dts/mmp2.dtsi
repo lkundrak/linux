@@ -123,6 +123,16 @@
 				reg = <0xd4207000 0x40>;
 				#phy-cells = <0>;
 			};
+
+			ehci0: usb-ehci@d4208000 {
+				compatible = "marvell,pxau2o-ehci";
+				reg = <0xd4208000 0x200>;
+				interrupts = <44>;
+				clocks = <&soc_clocks MMP2_CLK_USB>;
+				clock-names = "USBCLK";
+				phys = <&usb_otg_phy>;
+				phy-names = "usb";
+			};
 		};
 
 		apb@d4000000 {	/* APB */
