@@ -39,7 +39,7 @@
 	};
 
 	panel {
-		compatible = "pixelqi,unknown", "simple-panel";
+		compatible = "innolux,ls075at011", "simple-panel";
 		width-mm = <152>;
 		height-mm = <115>;
 
