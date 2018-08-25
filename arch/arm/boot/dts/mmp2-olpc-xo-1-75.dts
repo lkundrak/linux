@@ -9,7 +9,7 @@
 	chosen {
 		/* bootargs = "console=ttyS2,115200 earlyprintk root=upadol rdinit=/bin/sh"; */
 		/* bootargs = "console=ttyS2,115200 earlyprintk root=/dev/ram0"; */
-		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module pxa168fb +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30";
+		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module pxa168fb +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30 drm.debug=0xff";
 	};
 
 	memory {
@@ -37,6 +37,7 @@
 			status = "okay";
 		};
 	};
+#endif
 
 	panel {
 		compatible = "innolux,ls075at011", "simple-panel";
@@ -55,18 +56,23 @@
 			hsync-len = <6>;
 			vsync-len = <3>;
 		};
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&lcd_out_con>;
+			};
+		};
 	};
-#endif
 
 	soc {
-#if 0
+#if 1
 		ap-sp@d4290000 {
 			#address-cells = <0x1>;
 			#size-cells = <0x0>;
 			/* clocks = <&soc_clocks MMP2_CLK_WTM>; */
 			compatible = "olpc,ap-sp";
 			interrupts = <40>;
-			reg = <0xd4290000 0x8f>;
+			reg = <0xd4290000 0xd0>;
 			status = "okay";
 
 			keyboard@0 {
@@ -83,6 +89,16 @@
 			};
 		};
 #endif
+		gpu: gpu@d420d000 {
+			clocks = <&soc_clocks MMP2_CLK_GPU>;
+			clock-names = "core";
+			compatible = "vivante,gc";
+			interrupts = <8>;
+			/* power-domains = <&gpu_domain>; */
+			reg = <0xd420d000 0x4000>;
+			/* status = "disabled"; */
+		};
+
 
 		apb@d4000000 {
 			spi0: ssp3@d4037000 {
@@ -168,6 +184,12 @@
 
 &lcdc {
 	status = "okay";
+
+	port {
+		lcd_out_con: endpoint {
+			remote-endpoint = <&panel_in>;
+		};
+	};
 };
 
 &ehci0 {

@@ -446,11 +446,11 @@
 		};
 
 		lcdc: lcdc@40500000 {
-			compatible = "marvell,pxa688-lcdc";
-			reg = <0xd420b000 0x400>;
+			compatible = "marvell,dove-lcd";
+			reg = <0xd420b000 0x1000>;
 			interrupts = <41>;
 			clocks = <&soc_clocks MMP2_CLK_DISP0>;
-			clock-names = "LCDCLK";
+			clock-names = "axiclk";
 			status = "disabled";
 		};
 	};
