@@ -64,8 +64,8 @@
 		};
 	};
 
+#if 0
 	soc {
-#if 1
 		ap-sp@d4290000 {
 			#address-cells = <0x1>;
 			#size-cells = <0x0>;
@@ -88,7 +88,6 @@
 				reg = <1>;
 			};
 		};
-#endif
 		gpu: gpu@d420d000 {
 			clocks = <&soc_clocks MMP2_CLK_GPU>;
 			clock-names = "core";
@@ -117,6 +116,7 @@
 
 		};
 	};
+#endif
 };
 
 &uart3 {
@@ -127,14 +127,15 @@
 &rtc {
 	status = "okay";
 };
+#endif
 
 &mmc1 {
 	bus-width = <8>;
 	no-1-8-v;
 	mrvl,clk-delay-cycles = <31>;
 	status = "okay";
+	power-gpios = <&gpio 35 GPIO_ACTIVE_HIGH>; /* ceck */
 };
-#endif
 
 &mmc2 {
 	bus-width = <8>;
@@ -150,15 +151,16 @@
 	keep-power-in-suspend;
 };
 
-#if 0
 &mmc3 {
 	bus-width = <8>;
 	non-removable;
 	broken-cd;
 	mrvl,clk-delay-cycles = <15>;
+	power-gpios = <&gpio 33 GPIO_ACTIVE_HIGH>; /* ceck */
 	status = "okay";
 };
 
+#if 0
 &twsi1 {
 	status = "okay";
 	codec: alc5631@1a {
