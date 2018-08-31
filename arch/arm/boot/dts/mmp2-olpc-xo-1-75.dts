@@ -9,7 +9,7 @@
 	chosen {
 		/* bootargs = "console=ttyS2,115200 earlyprintk root=upadol rdinit=/bin/sh"; */
 		/* bootargs = "console=ttyS2,115200 earlyprintk root=/dev/ram0"; */
-		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module pxa168fb +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30 drm.debug=0xff";
+		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module sdhci_pxav3 +p; module mmc_core +p; module sdhci +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30 drm.debug=0xff ignore_loglevel=1";
 	};
 
 	memory {
@@ -129,15 +129,22 @@
 };
 #endif
 
+#if 1
 &mmc1 {
+	// 50000000,
+	//   400000Hz
+	clock-frequency = <50000000>;
 	bus-width = <8>;
 	no-1-8-v;
 	mrvl,clk-delay-cycles = <31>;
 	status = "okay";
 	power-gpios = <&gpio 35 GPIO_ACTIVE_HIGH>; /* ceck */
 };
+#endif
 
+#if 0
 &mmc2 {
+	clock-frequency = <50000000>;
 	bus-width = <8>;
 	non-removable;
 	broken-cd;
@@ -150,15 +157,20 @@
 	wakeup-source;
 	keep-power-in-suspend;
 };
+#endif
 
+#if 0
 &mmc3 {
+	clock-frequency = <50000000>;
 	bus-width = <8>;
 	non-removable;
 	broken-cd;
-	mrvl,clk-delay-cycles = <15>;
+	// mrvl,clk-delay-cycles = <15>;
+	mrvl,clk-delay-cycles = <31>;
 	power-gpios = <&gpio 33 GPIO_ACTIVE_HIGH>; /* ceck */
 	status = "okay";
 };
+#endif
 
 #if 0
 &twsi1 {
@@ -171,6 +183,7 @@
 };
 
 &twsi2 {
+	// rtc
 	status = "okay";
 };
 
