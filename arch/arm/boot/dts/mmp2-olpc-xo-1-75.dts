@@ -9,7 +9,8 @@
 	chosen {
 		/* bootargs = "console=ttyS2,115200 earlyprintk root=upadol rdinit=/bin/sh"; */
 		/* bootargs = "console=ttyS2,115200 earlyprintk root=/dev/ram0"; */
-		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module sdhci_pxav3 +p; module mmc_core +p; module sdhci +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30 drm.debug=0xff ignore_loglevel=1";
+		/* bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init dyndbg=\"module sdhci_pxav3 +p; module mmc_core +p; module sdhci +p\" clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30 drm.debug=0xff ignore_loglevel=1"; */
+		bootargs = "console=tty0 console=ttyS2,115200 earlyprintk root=upadol rdinit=/sbin/init clk_ignore_unused vt.color=0xf0 fbcon=font:OLPC15x30";
 	};
 
 	memory {
@@ -88,7 +89,6 @@
 			};
 		};
 
-#if 0
 		gpu: gpu@d420d000 {
 			clocks = <&soc_clocks MMP2_CLK_GPU>;
 			clock-names = "core";
@@ -107,16 +107,16 @@
 				interrupts = <20>;
 				clocks = <&soc_clocks MMP2_CLK_SSP3>;
 				spi-slave;
-
+#if 0
 				slave {
 					compatible = "olpc,xo1.75-ec";
 					ack-gpio = <&gpio 125 GPIO_ACTIVE_HIGH>;
 					cmd-gpio = <&gpio 155 GPIO_ACTIVE_HIGH>;
 				};
+#endif
 			};
 
 		};
-#endif
 	};
 };
 
@@ -124,7 +124,7 @@
 	status = "okay";
 };
 
-#if 0
+#if 1
 &rtc {
 	status = "okay";
 };
@@ -143,7 +143,7 @@
 };
 #endif
 
-#if 0
+#if 1
 &mmc2 {
 	clock-frequency = <50000000>;
 	bus-width = <8>;
@@ -160,7 +160,7 @@
 };
 #endif
 
-#if 0
+#if 1
 &mmc3 {
 	clock-frequency = <50000000>;
 	bus-width = <8>;
@@ -173,14 +173,15 @@
 };
 #endif
 
-#if 0
 &twsi1 {
 	status = "okay";
+#if 0
 	codec: alc5631@1a {
 		compatible = "realtek,alc5631";
 		reg = <0x1a>;
 		status = "okay";
 	};
+#endif
 };
 
 &twsi2 {
@@ -190,13 +191,14 @@
 
 &twsi6 {
 	status = "okay";
+#if 0
         accelerometer: lis3lv02d@1d {
                 compatible = "st,lis331dlh", "st,lis3lv02d";
                 reg = <0x1d>;
 		status = "okay";
         };
-};
 #endif
+};
 
 &lcdc {
 	status = "okay";
