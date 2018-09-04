@@ -64,7 +64,6 @@
 		};
 	};
 
-#if 0
 	soc {
 		ap-sp@d4290000 {
 			#address-cells = <0x1>;
@@ -88,6 +87,8 @@
 				reg = <1>;
 			};
 		};
+
+#if 0
 		gpu: gpu@d420d000 {
 			clocks = <&soc_clocks MMP2_CLK_GPU>;
 			clock-names = "core";
@@ -115,8 +116,8 @@
 			};
 
 		};
-	};
 #endif
+	};
 };
 
 &uart3 {
@@ -209,4 +210,8 @@
 
 &ehci0 {
 	status = "okay";
+};
+
+&gpio {
+	status = "disabled";
 };
