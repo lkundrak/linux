@@ -446,7 +446,7 @@
 		};
 
 		lcdc: lcdc@40500000 {
-			compatible = "marvell,dove-lcd";
+			compatible = "marvell,mmp2-lcd";
 			reg = <0xd420b000 0x1000>;
 			interrupts = <41>;
 			clocks = <&soc_clocks MMP2_CLK_DISP0>;

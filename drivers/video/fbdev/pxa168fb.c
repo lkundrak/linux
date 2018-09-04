@@ -654,9 +654,9 @@ static int pxa168fb_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	clk = devm_clk_get(&pdev->dev, "LCDCLK");
+	clk = devm_clk_get(&pdev->dev, "axiclk");
 	if (IS_ERR(clk)) {
-		dev_err(&pdev->dev, "unable to get LCDCLK");
+		dev_err(&pdev->dev, "unable to get axiclk");
 		return PTR_ERR(clk);
 	}
 
@@ -854,7 +854,7 @@ static int pxa168fb_remove(struct platform_device *pdev)
 
 static const struct of_device_id pxa168fb_of_dev_id[] = {
         { .compatible = "marvell,pxa168-lcdc", },
-        { .compatible = "marvell,pxa688-lcdc", },
+        { .compatible = "marvell,mmp2-lcd", },
         { /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, pxa168fb_of_dev_id);
