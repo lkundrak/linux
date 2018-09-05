@@ -73,6 +73,16 @@
 			status = "okay";
 		};
 
+		gpu: gpu@d420d000 {
+			clocks = <&soc_clocks MMP2_CLK_GPU>;
+			clock-names = "core";
+			compatible = "vivante,gc";
+			interrupts = <8>;
+			/* power-domains = <&gpu_domain>; */
+			reg = <0xd420d000 0x4000>;
+			/* status = "disabled"; */
+		};
+
 		apb@d4000000 {
 			spi0: ssp3@d4037000 {
 				compatible = "marvell,mmp2-ssp3";
