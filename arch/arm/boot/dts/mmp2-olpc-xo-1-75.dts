@@ -114,6 +114,7 @@
 	no-1-8-v;
 	mrvl,clk-delay-cycles = <31>;
 	status = "okay";
+	power-gpios = <&gpio 35 GPIO_ACTIVE_HIGH>; /* ceck */
 };
 
 &mmc2 {
@@ -135,6 +136,7 @@
 	non-removable;
 	broken-cd;
 	mrvl,clk-delay-cycles = <15>;
+	power-gpios = <&gpio 33 GPIO_ACTIVE_HIGH>; /* ceck */
 	status = "okay";
 };
 
