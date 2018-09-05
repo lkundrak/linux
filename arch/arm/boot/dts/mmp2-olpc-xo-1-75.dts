@@ -115,6 +115,9 @@
 	reset-gpios = <&gpio 58 GPIO_ACTIVE_LOW>; /* ceck */
 	mrvl,clk-delay-cycles = <31>;
 	status = "okay";
+
+	wakeup-source;
+	keep-power-in-suspend;
 };
 
 &mmc3 {
