@@ -1555,7 +1555,7 @@ pxa2xx_spi_init_pdata(struct platform_device *pdev)
 	}
 #endif
 
-#if CONFIG_OF
+#ifdef CONFIG_OF
 	if (of_id) {
 		pdata->is_slave = of_property_read_bool(pdev->dev.of_node,
 								"spi-slave");
