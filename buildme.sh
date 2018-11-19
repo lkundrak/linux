@@ -6,17 +6,21 @@ fi
 if [ "$ARCH" = arm ]; then
 	[ -n "$CROSS_COMPILE" ]	|| CROSS_COMPILE=arm-linux-gnu-
 	[ -n "$DEFCONFIG" ]	|| DEFCONFIG=olpc_xo175_defconfig
-	[ -n "$XO" ]		|| XO=xo.local
 	[ -n "$TARGET" ]	|| TARGET=olpc-zImage
 	[ -n "$DIR" ]		|| DIR=XO175
 	[ -n "$IMAGE" ]		|| IMAGE=zImage
+	[ -n "$XO" ]		|| XO=xo.local
 elif [ "$ARCH" = x86 ]; then
 	[ -n "$CROSS_COMPILE" ]	|| CROSS_COMPILE=
 	[ -n "$DEFCONFIG" ]	|| DEFCONFIG=olpc_xo1_defconfig
-	[ -n "$XO" ]		|| XO=xo1.local
 	[ -n "$TARGET" ]	|| TARGET=bzImage
 	[ -n "$DIR" ]		|| DIR=XO1
 	[ -n "$IMAGE" ]		|| IMAGE=$TARGET
+	if [ "$HOSTNAME" = belphegor ]; then
+		[ -n "$XO" ]	|| XO=xo2.local
+	else
+		[ -n "$XO" ]	|| XO=xo1.local
+	fi
 else
 	echo Bad ARCH >&2
 	exit

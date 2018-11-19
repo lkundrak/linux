@@ -9,7 +9,9 @@ BRANCHES="$BRANCHES lr/olpc-xo175-fixes4-spi-slave-ready"
 BRANCHES="$BRANCHES lr/olpc-xo175-fixes4-ec"
 
 BRANCHES="$BRANCHES lr/olpc-xo175-fixes2-trivial"
-BRANCHES="$BRANCHES lr/olpc-xo175-fixes2-mmp-camera"
+BRANCHES="$BRANCHES lr/olpc-xo175-fixes3-mmp-camera"
+
+#BRANCHES="$BRANCHES lr/olpc-xo175-fixes2-mmp-camera"
 
 #BRANCHES="$BRANCHES lr/olpc-xo175-fixes3-cpu-fixes"
 ##BRANCHES="$BRANCHES lr/olpc-xo175-fixes2-cpu-mmp2"
@@ -21,7 +23,7 @@ BRANCHES="$BRANCHES lr/olpc-xo175-fixes2-mmp-camera"
 
 
 git branch -D merged || :
-git checkout -b merged v4.20-rc2
+git checkout -b merged v4.20-rc3
 
 for B in $BRANCHES; do
 	if ! EDITOR=: git merge $B; then
