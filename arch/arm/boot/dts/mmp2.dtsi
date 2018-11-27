@@ -163,7 +163,7 @@
 				status = "disabled";
 			};
 
-			mmc4: mmc@d4288000 {
+			mmc4: mmc@d4281800 {
 				compatible = "mrvl,pxav3-mmc";
 				reg = <0xd4281800 0x120>;
 				clocks = <&soc_clocks MMP2_CLK_SDH3>;
